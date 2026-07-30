@@ -1,5 +1,13 @@
 name: .NET Framework Build
-on: [push, pull_request]
+
+on:
+  push:
+    branches-ignore:
+      - linux-support
+  pull_request:
+    branches-ignore:
+      - linux-support
+
 jobs:
   build:
     runs-on: windows-latest
