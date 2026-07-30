@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>GameRes</AssemblyName>
+    <RootNamespace>GameRes</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+    <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="ArcFile.cs" />
+    <Compile Include="ArchiveFormat.cs" />
+    <Compile Include="ArcStream.cs" />
+    <Compile Include="ArcView.cs" />
+    <Compile Include="Audio.cs" />
+    <Compile Include="BinaryStream.cs" />
+    <Compile Include="ByteArray.cs" />
+    <Compile Include="Checksum.cs" />
+    <Compile Include="FileSystem.cs" />
+    <Compile Include="FormatCatalog.cs" />
+    <Compile Include="GameRes.cs" />
+    <Compile Include="MultiDict.cs" />
+    <Compile Include="Properties/AssemblyInfo.cs" />
+    <Compile Include="Properties/Settings.cs" />
+    <Compile Include="Properties/Settings.Designer.cs" />
+    <Compile Include="ResourceSettings.cs" />
+    <Compile Include="ScriptText.cs" />
+    <Compile Include="StructSerialization.cs" />
+    <Compile Include="Strings/garStrings.Designer.cs" />
+    <Compile Include="Utility.cs" />
+    <Compile Include="ZLibStream.cs" />
+    <Compile Include="Imaging/*.cs" />
+    <Compile Include="Portable/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Strings/garStrings.resx" />
+    <EmbeddedResource Include="Strings/garStrings.ja-JP.resx" />
+    <EmbeddedResource Include="Strings/garStrings.ko-KR.resx" />
+    <EmbeddedResource Include="Strings/garStrings.ru-RU.resx" />
+    <EmbeddedResource Include="Strings/garStrings.zh-Hans.resx" />
+    <EmbeddedResource Include="Strings/garStrings.zh-Hant.resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="System.ComponentModel.Composition" Version="8.0.0" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0" />
+    <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
+  </ItemGroup>
+</Project>
