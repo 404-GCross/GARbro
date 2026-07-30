@@ -21,7 +21,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Restore
-        run: dotnet restore Console/GARbro.Console.Portable.csproj
+        run: dotnet restore Console/GARbro.Console.Portable.csproj -r linux-x64
 
       - name: Build
         run: dotnet build Console/GARbro.Console.Portable.csproj -c Release --no-restore
