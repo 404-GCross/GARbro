@@ -11,9 +11,13 @@ existing .NET Framework/WPF Windows projects.
   - Excludes the WPF-backed built-in image codecs for now.
 - `ArcFormats/ArcFormats.Portable.csproj`
   - SDK-style `net8.0` project.
-  - Currently builds an empty `ArcFormats.dll` anchor assembly.
-  - Format sources should be added back one at a time after their WPF,
-    settings, GUI prompt, image, and audio dependencies are made portable.
+  - Builds a real portable `ArcFormats.dll` from archive openers that do not
+    require WPF UI, WPF image types, Windows-only audio playback, or native
+    GUI prompts.
+  - Uses a broad `**/Arc*.cs` include plus an explicit exclusion list, so new
+    upstream pure-archive openers can enter the Linux build automatically.
+  - Publishes `ArcFormats/Resources/*` as `GameData/*` for format-side data
+    files and title/key lookup resources.
 - `Console/GARbro.Console.Portable.csproj`
   - SDK-style `net8.0` CLI entry point.
   - References the portable `GameRes` and `ArcFormats` projects.
@@ -22,6 +26,8 @@ Build command, once the .NET SDK is available:
 
 ```sh
 dotnet build Console/GARbro.Console.Portable.csproj -c Release
+dotnet publish Console/GARbro.Console.Portable.csproj -c Release -r linux-x64 \
+  --self-contained false -o artifacts/linux-portable
 ```
 
 On this Fedora machine, `dotnet-host` was installed without a matching SDK and
@@ -53,10 +59,25 @@ artifact.
 
 ## Current scope
 
-The current target is a Linux CLI skeleton that compiles and starts. The next
-target is to add a first portable archive format so the CLI can list archive
-contents and extract entries as raw files. Image conversion, image preview,
-audio playback, and GUI work are deliberately left out of this slice.
+The current target is a native Linux CLI that can list and extract archive
+entries as raw files. The published `linux-x64` output has been smoke-tested
+with:
+
+```sh
+dotnet artifacts/linux-portable/GARbro.Console.dll -l
+dotnet artifacts/linux-portable/GARbro.Console.dll sample.zip
+```
+
+Current local verification:
+
+- `dotnet build Console/GARbro.Console.Portable.csproj -c Release` succeeds.
+- `dotnet publish ... -r linux-x64 --self-contained false` succeeds.
+- `-l` reports 363 archive formats.
+- A test ZIP archive lists successfully from the published output.
+- Published artifact size is about 43 MB because it now includes `GameData`.
+
+Image conversion, image preview, audio playback, and GUI work are deliberately
+left out of this slice.
 
 ## Platform boundary
 
@@ -76,8 +97,8 @@ The existing WPF `GameRes/Image.cs` remains untouched for the Windows project.
 
 ## Excluded format groups
 
-The portable `ArcFormats` project currently excludes all real format sources.
-The earlier broad include attempt showed the main dependency categories:
+The portable `ArcFormats` project includes the broad pure-archive set and
+excludes sources that still require platform-specific or not-yet-ported code:
 
 - all `Image*.cs` files
 - all XAML widget/create helper files
@@ -87,19 +108,21 @@ The earlier broad include attempt showed the main dependency categories:
 - files that instantiate GUI parameter widgets
 - files coupled to image/audio sub-decoders such as `PngFormat`, `WaveAudio`,
   `OggAudio`, `Texture2D`, and WebP internals
+- files that subclass excluded image/audio/archive helpers
 
-These excluded files should be restored gradually by replacing WPF image APIs
-with the portable image model. Start with high-value archive openers that only
-use WPF to compose or tag image entries.
+Several high-value formats have already been made portable enough for the CLI,
+including ZIP, NScripter NSA/SAR, and KiriKiri XP3 for non-interactive/no-crypt
+or known-scheme cases. Formats that need a password or GUI-only option dialog
+should be restored by adding CLI/default option handling first.
 
 ## Next migration steps
 
-1. Install .NET SDK 8+ and run the portable build.
-2. Fix compile errors in `ArcFormats.Portable.csproj` by either:
-   - adding missing pure helper files, or
-   - excluding files that still depend on WPF/native Windows code.
-3. Add ImageSharp-based PNG/JPEG/BMP writers for CLI conversion.
-4. Convert selected `Image*.cs` files from `PixelFormats.*` and
+1. Add CLI option handling for encrypted archives that currently relied on WPF
+   widgets for passwords or title/key choices.
+2. Add ImageSharp-based PNG/JPEG/BMP writers for CLI conversion.
+3. Convert selected `Image*.cs` files from `PixelFormats.*` and
    `BitmapPalette` to `PixelFormatKind` and `ImagePalette`.
+4. Replace WPF-only archive image composition helpers with portable image
+   composition where needed.
 5. Add an Avalonia project only after the CLI can open and extract common
    archives.

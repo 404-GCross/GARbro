@@ -4,6 +4,8 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>GARbro.Console</AssemblyName>
     <RootNamespace>GARbro</RootNamespace>
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>

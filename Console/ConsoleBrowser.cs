@@ -167,7 +167,11 @@ namespace GARbro
             }
             catch (Exception X)
             {
+#if NET6_0_OR_GREATER
+                _ = X;
+#else
                 Console.Error.WriteLine ("Scheme deserialization failed: {0}", X.Message);
+#endif
             }
         }
 

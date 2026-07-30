@@ -4,6 +4,7 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics;
 using System.Text;
@@ -13,10 +14,22 @@ namespace GameRes.Formats
 {
     internal class LocalResourceSetting : ResourceSettingBase
     {
+#if NET6_0_OR_GREATER
+        static readonly Dictionary<string, object> s_values = new Dictionary<string, object>();
+
+        public override object Value {
+            get {
+                object value;
+                return s_values.TryGetValue (Name, out value) ? value : null;
+            }
+            set { s_values[Name] = value; }
+        }
+#else
         public override object Value {
             get { return Properties.Settings.Default[Name]; }
             set { Properties.Settings.Default[Name] = value; }
         }
+#endif
 
         public LocalResourceSetting () { }
 
@@ -60,17 +73,21 @@ namespace GameRes.Formats
     {
         public void UpgradeSettings ()
         {
+#if !NET6_0_OR_GREATER
             if (Properties.Settings.Default.UpgradeRequired)
             {
                 Properties.Settings.Default.Upgrade();
                 Properties.Settings.Default.UpgradeRequired = false;
                 Properties.Settings.Default.Save();
             }
+#endif
         }
 
         public void SaveSettings ()
         {
+#if !NET6_0_OR_GREATER
             Properties.Settings.Default.Save();
+#endif
         }
     }
 }

@@ -213,28 +213,47 @@ namespace GameRes.Formats.NScripter
 
         public override ResourceOptions GetDefaultOptions ()
         {
+#if NET6_0_OR_GREATER
+            return new NsaOptions {
+                CompressionType = Compression.None,
+                Password        = "",
+            };
+#else
             return new NsaOptions {
                 CompressionType = Properties.Settings.Default.ONSCompression,
                 Password        = Properties.Settings.Default.NSAPassword,
             };
+#endif
         }
 
         public override ResourceOptions GetOptions (object widget)
         {
+#if NET6_0_OR_GREATER
+            return GetDefaultOptions();
+#else
             var w = widget as GUI.WidgetNSA;
             if (null != w)
                 Properties.Settings.Default.NSAPassword = w.Password.Text;
             return GetDefaultOptions();
+#endif
         }
 
         public override object GetAccessWidget ()
         {
+#if NET6_0_OR_GREATER
+            return null;
+#else
             return new GUI.WidgetNSA (KnownKeys);
+#endif
         }
 
         public override object GetCreationWidget ()
         {
+#if NET6_0_OR_GREATER
+            return null;
+#else
             return new GUI.CreateONSWidget();
+#endif
         }
 
         public override void Create (Stream output, IEnumerable<Entry> list, ResourceOptions options,

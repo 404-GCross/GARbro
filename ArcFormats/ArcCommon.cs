@@ -63,6 +63,14 @@ namespace GameRes.Formats
         public static IResource DetectFileType (uint signature)
         {
             if (0 == signature) return null;
+#if NET6_0_OR_GREATER
+            var res = FormatCatalog.Instance.LookupSignature (signature);
+            if (!res.Any())
+                return null;
+            if (res.Skip (1).Any()) // type is ambiguous
+                return null;
+            return res.First();
+#else
             // resolve some special cases first
             if (OggAudio.Instance.Signature == signature)
                 return OggAudio.Instance;
@@ -78,6 +86,7 @@ namespace GameRes.Formats
             if (res.Skip (1).Any()) // type is ambiguous
                 return null;
             return res.First();
+#endif
         }
 
         private string GetName (string name)

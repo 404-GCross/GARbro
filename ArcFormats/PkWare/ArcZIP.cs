@@ -134,7 +134,11 @@ namespace GameRes.Formats.PkWare
 
         internal ArcFile OpenZipArchive (ArcView file, Stream input)
         {
+#if NET6_0_OR_GREATER
+            var sc = SharpZip.StringCodec.FromCodePage (Encoding.UTF8.CodePage);
+#else
             var sc = SharpZip.StringCodec.FromCodePage (Properties.Settings.Default.ZIPEncodingCP);
+#endif
             var zip = new SharpZip.ZipFile (input, false, sc);
             try
             {
@@ -206,23 +210,39 @@ namespace GameRes.Formats.PkWare
 
         public override ResourceOptions GetDefaultOptions ()
         {
+#if NET6_0_OR_GREATER
+            return new ZipOptions {
+                CompressionLevel = CompressionLevel.Optimal,
+                FileNameEncoding = Encoding.UTF8,
+                Password = "",
+            };
+#else
             return new ZipOptions {
                 CompressionLevel = Properties.Settings.Default.ZIPCompression,
                 FileNameEncoding = ZipEncoding.Get<Encoding>(),
                 Password = Properties.Settings.Default.ZIPPassword,
             };
+#endif
         }
 
         public override ResourceOptions GetOptions (object widget)
         {
+#if NET6_0_OR_GREATER
+            return GetDefaultOptions();
+#else
             if (widget is GUI.WidgetZIP)
                 Properties.Settings.Default.ZIPPassword = ((GUI.WidgetZIP)widget).Password.Text;
             return GetDefaultOptions();
+#endif
         }
 
         public override object GetAccessWidget ()
         {
+#if NET6_0_OR_GREATER
+            return null;
+#else
             return new GUI.WidgetZIP (DefaultScheme.KnownKeys);
+#endif
         }
 
         // TODO: GUI widget for options

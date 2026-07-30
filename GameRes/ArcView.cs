@@ -33,6 +33,13 @@ namespace GameRes
 {
     public static class Encodings
     {
+#if NET6_0_OR_GREATER
+        static Encodings ()
+        {
+            Encoding.RegisterProvider (CodePagesEncodingProvider.Instance);
+        }
+#endif
+
         public static readonly Encoding cp932 = Encoding.GetEncoding(932);
 
         public static Encoding WithFatalFallback (this Encoding enc)

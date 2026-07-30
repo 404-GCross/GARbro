@@ -98,7 +98,11 @@ namespace GameRes.Formats.KiriKiri
             (byte)'X', (byte)'P', (byte)'3', 0x0d, 0x0a, 0x20, 0x0a, 0x1a, 0x8b, 0x67, 0x01
         };
 
+#if NET6_0_OR_GREATER
+        public bool ForceEncryptionQuery = false;
+#else
         public bool ForceEncryptionQuery = true;
+#endif
 
         internal static readonly ICrypt NoCryptAlgorithm = new NoCrypt();
 
@@ -413,6 +417,15 @@ NextEntry:
 
         public override ResourceOptions GetDefaultOptions ()
         {
+#if NET6_0_OR_GREATER
+            return new Xp3Options {
+                Version             = 2,
+                Scheme              = NoCryptAlgorithm,
+                CompressIndex       = true,
+                CompressContents    = false,
+                RetainDirs          = false,
+            };
+#else
             return new Xp3Options {
                 Version             = Properties.Settings.Default.XP3Version,
                 Scheme              = GetScheme (Properties.Settings.Default.XP3Scheme),
@@ -420,16 +433,25 @@ NextEntry:
                 CompressContents    = Properties.Settings.Default.XP3CompressContents,
                 RetainDirs          = Properties.Settings.Default.XP3RetainStructure,
             };
+#endif
         }
 
         public override object GetCreationWidget ()
         {
+#if NET6_0_OR_GREATER
+            return null;
+#else
             return new GUI.CreateXP3Widget();
+#endif
         }
 
         public override object GetAccessWidget ()
         {
+#if NET6_0_OR_GREATER
+            return null;
+#else
             return new GUI.WidgetXP3();
+#endif
         }
 
         ICrypt QueryCryptAlgorithm (ArcView file)
@@ -666,8 +688,13 @@ NextEntry:
             if (file.Length > int.MaxValue)
                 throw new FileSizeException();
 
+#if NET6_0_OR_GREATER
+            using (var map = MemoryMappedFile.CreateFromFile (file, null, 0,
+                    MemoryMappedFileAccess.Read, HandleInheritability.None, true))
+#else
             using (var map = MemoryMappedFile.CreateFromFile (file, null, 0,
                     MemoryMappedFileAccess.Read, null, HandleInheritability.None, true))
+#endif
             {
                 uint unpacked_size    = (uint)file.Length;
                 xp3entry.UnpackedSize = (uint)unpacked_size;

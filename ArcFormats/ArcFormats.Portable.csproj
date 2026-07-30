@@ -3,15 +3,221 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>ArcFormats</AssemblyName>
     <RootNamespace>GameRes.Formats</RootNamespace>
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);SYSLIB0011</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Portable/AssemblyAnchor.cs" />
+    <Compile Include="Properties/AssemblyInfo.cs" />
+    <Compile Include="**/Arc*.cs" Exclude="bin/**;obj/**;Strings/**" />
+    <Compile Include="BitStream.cs" />
+    <Compile Include="Blowfish.cs" />
+    <Compile Include="aNCHOR/Blowfish.cs" />
+    <Compile Include="AZSys/FastMersenneTwister.cs" />
+    <Compile Include="Camellia.cs" />
+    <Compile Include="CommonStreams.cs" />
+    <Compile Include="Cri/BigEndianReader.cs" />
+    <Compile Include="Crc16.cs" />
+    <Compile Include="Crc32.cs" />
+    <Compile Include="Crc64.cs" />
+    <Compile Include="EmbeddedResource.cs" />
+    <Compile Include="Entergram/QuickLZ.cs" />
+    <Compile Include="ExeFile.cs" />
+    <Compile Include="HuffmanCompression.cs" />
+    <Compile Include="HuneX/Decoder.cs" />
+    <Compile Include="KiriKiri/ChainReactionCrypt.cs" />
+    <Compile Include="KiriKiri/CroixCrypt.cs" />
+    <Compile Include="KiriKiri/CryptAlgorithms.cs" />
+    <Compile Include="KiriKiri/CzCrypt.cs" />
+    <Compile Include="KiriKiri/HxCrypt.cs" />
+    <Compile Include="KiriKiri/HxCryptLite.cs" />
+    <Compile Include="KiriKiri/KiriKiriCx.cs" />
+    <Compile Include="KiriKiri/MoreCrypt.cs" />
+    <Compile Include="KiriKiri/YuzCrypt.cs" />
+    <Compile Include="KogadoCocotte.cs" />
+    <Compile Include="Lz4Stream.cs" />
+    <Compile Include="DxLib/DxKey.cs" />
+    <Compile Include="Lzma/*.cs" />
+    <Compile Include="LzssStream.cs" />
+    <Compile Include="Malie/LibScheme.cs" />
+    <Compile Include="Malie/MalieEncryption.cs" />
+    <Compile Include="MD5.cs" />
+    <Compile Include="MersenneTwister.cs" />
+    <Compile Include="MultiFileArchive.cs" />
+    <Compile Include="NScripter/EncryptedStream.cs" />
+    <Compile Include="PackedStream.cs" />
+    <Compile Include="Primel/Compression.cs" />
+    <Compile Include="Primel/Encryption.cs" />
+    <Compile Include="Primel/RC6.cs" />
+    <Compile Include="Primel/SHA256.cs" />
+    <Compile Include="ResourceSettings.cs" />
+    <Compile Include="RC4.cs" />
+    <Compile Include="SimpleEncryption.cs" />
+    <Compile Include="SingleFileArchive.cs" />
+    <Compile Include="aPLibStream.cs" />
+    <Compile Include="Cmvs/CmvsMD5.cs" />
+    <Compile Include="Cmvs/CpzHeader.cs" />
+    <Compile Include="Cmvs/HuffmanDecoder.cs" />
+    <Compile Include="Strings/arcStrings.Designer.cs" />
+    <Compile Remove="AZSys/ArcAZSys.cs" />
+    <Compile Remove="Amaterasu/ArcAMI.cs" />
+    <Compile Remove="AnimeGameSystem/ArcANI.cs" />
+    <Compile Remove="AnimeGameSystem/ArcDAT.cs" />
+    <Compile Remove="Ankh/ArcDAT.cs" />
+    <Compile Remove="Ankh/ArcGRP.cs" />
+    <Compile Remove="BlackRainbow/ArcIMP.cs" />
+    <Compile Remove="Cadath/ArcDAF.cs" />
+    <Compile Remove="CatSystem/ArcHG2.cs" />
+    <Compile Remove="CatSystem/ArcHG3.cs" />
+    <Compile Remove="CatSystem/ArcINT.cs" />
+    <Compile Remove="Crowd/ArcPCK.cs" />
+    <Compile Remove="CsWare/ArcDAT.cs" />
+    <Compile Remove="Cyberworks/ArcDAT.cs" />
+    <Compile Remove="Cyberworks/ArcDATA.cs" />
+    <Compile Remove="Cyberworks/ArcAPP.cs" />
+    <Compile Remove="Dac/ArcDPK.cs" />
+    <Compile Remove="DxLib/ArcDX.cs" />
+    <Compile Remove="DxLib/ArcDX8.cs" />
+    <Compile Remove="DxLib/ArcMED.cs" />
+    <Compile Remove="Eagls/ArcEAGLS.cs" />
+    <Compile Remove="Ellefin/ArcEPK.cs" />
+    <Compile Remove="EmonEngine/ArcEME.cs" />
+    <Compile Remove="Emote/ArcPSB.cs" />
+    <Compile Remove="Entis/ArcERI.cs" />
+    <Compile Remove="Entis/ArcNOA.cs" />
+    <Compile Remove="FC01/ArcBDT.cs" />
+    <Compile Remove="FC01/ArcMCA.cs" />
+    <Compile Remove="Favorite/ArcHZC.cs" />
+    <Compile Remove="FlyingShine/ArcPD.cs" />
+    <Compile Remove="Foster/ArcC24.cs" />
+    <Compile Remove="FrontWing/ArcFG.cs" />
+    <Compile Remove="GameSystem/ArcCHR.cs" />
+    <Compile Remove="GameSystem/ArcDAT.cs" />
+    <Compile Remove="GameSystem/ArcPureMail.cs" />
+    <Compile Remove="Groover/ArcPCG.cs" />
+    <Compile Remove="Gss/ArcARC.cs" />
+    <Compile Remove="Hexenhaus/ArcWAG.cs" />
+    <Compile Remove="Hexenhaus/ArcODIO.cs" />
+    <Compile Remove="HuneX/ArcMZP.cs" />
+    <Compile Remove="Hypatia/ArcLPC.cs" />
+    <Compile Remove="Ikura/ArcDRS.cs" />
+    <Compile Remove="Ikura/ArcGAN.cs" />
+    <Compile Remove="Ikura/ArcTAN.cs" />
+    <Compile Remove="Kaas/ArcKAAS.cs" />
+    <Compile Remove="Kaguya/ArcAN21.cs" />
+    <Compile Remove="Kaguya/ArcANM.cs" />
+    <Compile Remove="Kaguya/ArcLINK.cs" />
+    <Compile Remove="Kaguya/ArcPL00.cs" />
+    <Compile Remove="Kaguya/ArcPL10.cs" />
+    <Compile Remove="Kaguya/ArcPLT.cs" />
+    <Compile Remove="KiriKiri/ArcTLG.cs" />
+    <Compile Remove="Kid/ArcKLZ.cs" />
+    <Compile Remove="Kogado/ArcARC.cs" />
+    <Compile Remove="Leaf/ArcLEAF.cs" />
+    <Compile Remove="Leaf/ArcPAK.cs" />
+    <Compile Remove="Lilim/ArcABM.cs" />
+    <Compile Remove="LiveMaker/ArcGALX.cs" />
+    <Compile Remove="Lucifen/ArcLPK.cs" />
+    <Compile Remove="MAGES/ArcLAY.cs" />
+    <Compile Remove="Macromedia/ArcDXR.cs" />
+    <Compile Remove="Macromedia/ArcSWF.cs" />
+    <Compile Remove="MangaGamer/ArcMGPK.cs" />
+    <Compile Remove="Marble/ArcMBL.cs" />
+    <Compile Remove="Masys/ArcMGS.cs" />
+    <Compile Remove="Morning/ArcPAK.cs" />
+    <Compile Remove="Mnp/ArcMMA.cs" />
+    <Compile Remove="Musica/ArcANI.cs" />
+    <Compile Remove="Musica/ArcMIP.cs" />
+    <Compile Remove="Musica/ArcPAZ.cs" />
+    <Compile Remove="Musica/ArcSQZ.cs" />
+    <Compile Remove="NScripter/ArcNS2.cs" />
+    <Compile Remove="NSystem/ArcFJSYS.cs" />
+    <Compile Remove="Nejii/ArcPCD.cs" />
+    <Compile Remove="Nekopunch/ArcPAK.cs" />
+    <Compile Remove="NitroPlus/ArcNPA.cs" />
+    <Compile Remove="NitroPlus/ArcNPK.cs" />
+    <Compile Remove="NitroPlus/ArcSteinsGate.cs" />
+    <Compile Remove="NonColor/ArcACV.cs" />
+    <Compile Remove="NonColor/ArcDAT.cs" />
+    <Compile Remove="NonColor/ArcMinato.cs" />
+    <Compile Remove="Nonono/ArcNPF.cs" />
+    <Compile Remove="Origin/ArcDAT.cs" />
+    <Compile Remove="Origin/ArcGAF.cs" />
+    <Compile Remove="Palette/ArcCHR.cs" />
+    <Compile Remove="Patisserie/ArcRAW.cs" />
+    <Compile Remove="Psp/ArcGim.cs" />
+    <Compile Remove="Qlie/ArcABMP.cs" />
+    <Compile Remove="Qlie/ArcQLIE.cs" />
+    <Compile Remove="RPM/ArcARC.cs" />
+    <Compile Remove="RealLive/ArcG00.cs" />
+    <Compile Remove="RealLive/ArcKOE.cs" />
+    <Compile Remove="RealLive/ArcSCENE.cs" />
+    <Compile Remove="RenPy/ArcRPA.cs" />
+    <Compile Remove="RiddleSoft/ArcPAC.cs" />
+    <Compile Remove="Sas5/ArcWAR.cs" />
+    <Compile Remove="Selene/ArcKCAP.cs" />
+    <Compile Remove="Seraphim/ArcCP3.cs" />
+    <Compile Remove="Seraphim/ArcSeraph.cs" />
+    <Compile Remove="ShiinaRio/ArcS25.cs" />
+    <Compile Remove="ShiinaRio/ArcWARC.cs" />
+    <Compile Remove="Softpal/ArcVAFS.cs" />
+    <Compile Remove="Software House Parsley/ArcCG.cs" />
+    <Compile Remove="Software House Parsley/ArcCG2.cs" />
+    <Compile Remove="Software House Parsley/ArcCG3.cs" />
+    <Compile Remove="Software House Parsley/ArcUCG.cs" />
+    <Compile Remove="Speed/ArcARC.cs" />
+    <Compile Remove="Tactics/ArcTactics.cs" />
+    <Compile Remove="Tamamo/ArcPCK.cs" />
+    <Compile Remove="Tanaka/ArcARCG.cs" />
+    <Compile Remove="Tanaka/ArcSMV.cs" />
+    <Compile Remove="Tanaka/ArcWSM.cs" />
+    <Compile Remove="TechnoBrain/ArcIPQ.cs" />
+    <Compile Remove="TechGian/ArcBIN.cs" />
+    <Compile Remove="Triangle/ArcBMX.cs" />
+    <Compile Remove="UMeSoft/ArcMGX.cs" />
+    <Compile Remove="Unity/ArcASSET.cs" />
+    <Compile Remove="Unity/ArcUnityFS.cs" />
+    <Compile Remove="Unity/Gx4Lib/ArcDAT.cs" />
+    <Compile Remove="Valkyria/ArcODN.cs" />
+    <Compile Remove="VnMaker/ArcZIP.cs" />
+    <Compile Remove="Will/ArcPNA.cs" />
+    <Compile Remove="Will/ArcWILL.cs" />
+    <Compile Remove="Xuse/ArcNT.cs" />
+    <Compile Remove="Xuse/ArcWVB.cs" />
+    <Compile Remove="YuRis/ArcYPF.cs" />
+    <Compile Remove="Zyx/ArcBDF.cs" />
+    <Compile Remove="rUGP/ArcRIO.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Strings/arcStrings.resx" />
+    <EmbeddedResource Include="Strings/arcStrings.ja-JP.resx" />
+    <EmbeddedResource Include="Strings/arcStrings.ko-KR.resx" />
+    <EmbeddedResource Include="Strings/arcStrings.ru-RU.resx" />
+    <EmbeddedResource Include="Strings/arcStrings.zh-Hans.resx" />
+    <EmbeddedResource Include="Strings/arcStrings.zh-Hant.resx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources/**/*">
+      <Link>GameData/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../GameRes/GameRes.Portable.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
 </Project>
