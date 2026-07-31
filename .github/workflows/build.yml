@@ -79,6 +79,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev
+          target_commitish: ${{ github.sha }}
           name: GARbro Linux dev
           body: |
             Automated Linux prerelease from `${{ github.sha }}`.
@@ -88,7 +89,7 @@ jobs:
             - GARbro-Linux-Portable.zip: command-line portable build.
           prerelease: true
           make_latest: false
-          replace_files: true
+          overwrite_files: true
           files: |
             artifacts/GARbro-Linux-GUI.zip
             artifacts/GARbro-Linux-Portable.zip
