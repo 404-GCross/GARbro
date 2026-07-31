@@ -1,4 +1,4 @@
-name: Linux Portable Build
+name: Linux Build
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  linux-portable:
+  linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,28 +25,48 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
+      - name: Restore CLI
         run: dotnet restore Console/GARbro.Console.Portable.csproj -r linux-x64
 
-      - name: Build
+      - name: Restore GUI
+        run: dotnet restore GUI.Linux/GARbro.GUI.Linux.csproj -r linux-x64
+
+      - name: Build CLI
         run: dotnet build Console/GARbro.Console.Portable.csproj -c Release --no-restore
+
+      - name: Build GUI
+        run: dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release --no-restore
 
       - name: Smoke test
         run: dotnet Console/bin/Release/net8.0/GARbro.Console.dll -l
 
-      - name: Publish Linux portable
+      - name: Publish Linux CLI
         run: dotnet publish Console/GARbro.Console.Portable.csproj -c Release --no-restore -r linux-x64 --self-contained false -o artifacts/linux-portable
+
+      - name: Publish Linux GUI
+        run: dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release --no-restore -r linux-x64 --self-contained false -o artifacts/linux-gui
 
       - name: Package Linux portable
         run: |
           cd artifacts/linux-portable
           zip -r ../GARbro-Linux-Portable.zip .
 
-      - name: Upload Artifact
+      - name: Package Linux GUI
+        run: |
+          cd artifacts/linux-gui
+          zip -r ../GARbro-Linux-GUI.zip .
+
+      - name: Upload CLI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: GARbro-Linux-Portable
           path: artifacts/GARbro-Linux-Portable.zip
+
+      - name: Upload GUI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GARbro-Linux-GUI
+          path: artifacts/GARbro-Linux-GUI.zip
 
       - name: Move dev tag
         if: github.event_name == 'push'
@@ -59,10 +79,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev
-          name: GARbro Linux Portable dev
+          name: GARbro Linux dev
           body: |
-            Automated Linux portable prerelease from `${{ github.sha }}`.
+            Automated Linux prerelease from `${{ github.sha }}`.
+
+            Assets:
+            - GARbro-Linux-GUI.zip: Avalonia Linux GUI.
+            - GARbro-Linux-Portable.zip: command-line portable build.
           prerelease: true
           make_latest: false
           replace_files: true
-          files: artifacts/GARbro-Linux-Portable.zip
+          files: |
+            artifacts/GARbro-Linux-GUI.zip
+            artifacts/GARbro-Linux-Portable.zip

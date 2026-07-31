@@ -1,7 +1,8 @@
 # Linux Port Notes
 
-This branch starts a native Linux command-line port without breaking the
-existing .NET Framework/WPF Windows projects.
+This branch starts a native Linux port without breaking the existing
+.NET Framework/WPF Windows projects. The Linux path uses portable resource
+projects plus a small Avalonia GUI.
 
 ## Portable projects
 
@@ -21,6 +22,11 @@ existing .NET Framework/WPF Windows projects.
 - `Console/GARbro.Console.Portable.csproj`
   - SDK-style `net8.0` CLI entry point.
   - References the portable `GameRes` and `ArcFormats` projects.
+- `GUI.Linux/GARbro.GUI.Linux.csproj`
+  - SDK-style `net8.0` Avalonia GUI entry point.
+  - References the same portable `GameRes` and `ArcFormats` projects.
+  - Provides archive opening, entry filtering, selected extraction, and full
+    extraction on Linux.
 
 Build command, once the .NET SDK is available:
 
@@ -28,6 +34,10 @@ Build command, once the .NET SDK is available:
 dotnet build Console/GARbro.Console.Portable.csproj -c Release
 dotnet publish Console/GARbro.Console.Portable.csproj -c Release -r linux-x64 \
   --self-contained false -o artifacts/linux-portable
+
+dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release
+dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release -r linux-x64 \
+  --self-contained false -o artifacts/linux-gui
 ```
 
 On this Fedora machine, `dotnet-host` was installed without a matching SDK and
@@ -42,26 +52,35 @@ Use it like this:
 ```sh
 DOTNET_ROOT=/home/gcross/.dotnet-fedora/usr/lib64/dotnet \
   /home/gcross/.dotnet-fedora/usr/bin/dotnet build Console/GARbro.Console.Portable.csproj -c Release
+DOTNET_ROOT=/home/gcross/.dotnet-fedora/usr/lib64/dotnet \
+  /home/gcross/.dotnet-fedora/usr/bin/dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release
 ```
 
 ## GitHub Actions
 
-The portable Linux build is also wired into:
+The Linux build is wired into:
 
 ```text
-.github/workflows/linux-portable-build.yml
+.github/workflows/build.yml
 ```
 
 It runs on `ubuntu-latest`, installs .NET 8 with `actions/setup-dotnet`, builds
-`Console/GARbro.Console.Portable.csproj`, publishes a `linux-x64`
-framework-dependent output, and uploads it as the `GARbro-Linux-Portable`
-artifact.
+the Linux CLI and GUI projects, publishes framework-dependent `linux-x64`
+outputs, uploads artifacts, and updates the fixed `dev` prerelease tag with:
+
+- `GARbro-Linux-GUI.zip`
+- `GARbro-Linux-Portable.zip`
 
 ## Current scope
 
-The current target is a native Linux CLI that can list and extract archive
-entries as raw files. The published `linux-x64` output has been smoke-tested
-with:
+The current target is a native Linux GUI plus CLI that can list and extract
+archive entries as raw files. The GUI command is:
+
+```sh
+artifacts/linux-gui/GARbro.GUI.Linux
+```
+
+The CLI has been smoke-tested with:
 
 ```sh
 dotnet artifacts/linux-portable/GARbro.Console.dll -l
@@ -71,13 +90,15 @@ dotnet artifacts/linux-portable/GARbro.Console.dll sample.zip
 Current local verification:
 
 - `dotnet build Console/GARbro.Console.Portable.csproj -c Release` succeeds.
+- `dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release` succeeds.
 - `dotnet publish ... -r linux-x64 --self-contained false` succeeds.
 - `-l` reports 363 archive formats.
 - A test ZIP archive lists successfully from the published output.
-- Published artifact size is about 43 MB because it now includes `GameData`.
+- The GUI publish output includes Avalonia, SkiaSharp native libraries, and
+  `GameData`.
 
-Image conversion, image preview, audio playback, and GUI work are deliberately
-left out of this slice.
+Image conversion, image preview, and audio playback are still deliberately left
+out of this slice.
 
 ## Platform boundary
 
@@ -124,5 +145,5 @@ should be restored by adding CLI/default option handling first.
    `BitmapPalette` to `PixelFormatKind` and `ImagePalette`.
 4. Replace WPF-only archive image composition helpers with portable image
    composition where needed.
-5. Add an Avalonia project only after the CLI can open and extract common
-   archives.
+5. Expand the Avalonia project with preview panes and archive-specific option
+   dialogs.
