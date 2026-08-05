@@ -1,15 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using GameRes;
@@ -18,28 +22,52 @@ namespace GARbro.GUI.Linux;
 
 public sealed class MainWindow : Window
 {
+    private enum ViewMode
+    {
+        Directory,
+        Archive
+    }
+
+    private enum OverwriteChoice
+    {
+        Cancel,
+        Overwrite,
+        Skip
+    }
+
     private readonly ObservableCollection<ArchiveEntryItem> _entries = new();
-    private readonly TextBlock _archiveText;
+    private readonly TextBlock _locationText;
     private readonly TextBlock _statusText;
     private readonly TextBox _outputBox;
     private readonly TextBox _filterBox;
+    private readonly TextBox _passwordBox;
+    private readonly ComboBox _convertFormatBox;
     private readonly ListBox _entryList;
+    private readonly Border _previewHost;
+    private readonly ProgressBar _progressBar;
+    private readonly Button _upButton;
     private readonly Button _extractSelectedButton;
     private readonly Button _extractAllButton;
+    private readonly Button _convertImageButton;
+    private readonly Button _openExternalButton;
+    private readonly Button _cancelButton;
     private ArcFile _archive;
     private string _archivePath;
+    private string _currentDirectory;
+    private ViewMode _mode;
+    private CancellationTokenSource _cancelSource;
 
     public MainWindow(string initialPath)
     {
         Title = "GARbro Linux";
-        Width = 1040;
-        Height = 680;
-        MinWidth = 760;
-        MinHeight = 480;
+        Width = 1200;
+        Height = 760;
+        MinWidth = 900;
+        MinHeight = 560;
 
-        _archiveText = new TextBlock
+        _locationText = new TextBlock
         {
-            Text = "No archive loaded",
+            Text = "Ready",
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
@@ -52,30 +80,66 @@ public sealed class MainWindow : Window
         {
             Watermark = "Extraction folder",
             Text = Environment.CurrentDirectory,
-            MinWidth = 280
+            MinWidth = 260
         };
         _filterBox = new TextBox
         {
-            Watermark = "Filter entries",
-            MinWidth = 180
+            Watermark = "Filter",
+            MinWidth = 150
+        };
+        _passwordBox = new TextBox
+        {
+            Watermark = "Password/key",
+            MinWidth = 130
+        };
+        _convertFormatBox = new ComboBox
+        {
+            Width = 82,
+            SelectedIndex = 0,
+            ItemsSource = new[] { "png", "jpg", "webp" }
         };
         _entryList = CreateEntryList();
-        _extractSelectedButton = CreateButton("Extract selected", OnExtractSelectedAsync);
-        _extractAllButton = CreateButton("Extract all", OnExtractAllAsync);
+        _previewHost = new Border
+        {
+            BorderBrush = new SolidColorBrush(Color.FromRgb(210, 214, 220)),
+            BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(Color.FromRgb(250, 251, 253)),
+            Padding = new Thickness(10)
+        };
+        _progressBar = new ProgressBar
+        {
+            Minimum = 0,
+            Maximum = 1,
+            Height = 8,
+            IsVisible = false
+        };
+        _upButton = CreateButton("Up", OnUpAsync, 64);
+        _extractSelectedButton = CreateButton("Extract selected", OnExtractSelectedAsync, 122);
+        _extractAllButton = CreateButton("Extract all", OnExtractAllAsync, 92);
+        _convertImageButton = CreateButton("Convert image", OnConvertImageAsync, 112);
+        _openExternalButton = CreateButton("Open external", OnOpenExternalAsync, 112);
+        _cancelButton = CreateButton("Cancel", OnCancelAsync, 76);
+        _cancelButton.IsEnabled = false;
 
         Content = BuildLayout();
-        SetArchiveActionsEnabled(false);
-
+        KeyDown += OnKeyDown;
         _filterBox.TextChanged += (_, _) => ApplyFilter();
+        _passwordBox.TextChanged += (_, _) => LinuxRuntimeOptions.Password = _passwordBox.Text;
+        SetPreviewMessage("Open a folder or archive to begin.");
 
         if (!string.IsNullOrWhiteSpace(initialPath))
         {
-            OpenArchive(initialPath);
+            OpenInitialPath(initialPath);
+        }
+        else
+        {
+            NavigateDirectory(Environment.CurrentDirectory);
         }
     }
 
     protected override void OnClosed(EventArgs e)
     {
+        _cancelSource?.Cancel();
         _archive?.Dispose();
         base.OnClosed(e);
     }
@@ -90,50 +154,73 @@ public sealed class MainWindow : Window
 
         var toolbar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*"),
             Margin = new Thickness(12),
             ColumnSpacing = 8
         };
-        toolbar.Children.Add(Place(CreateButton("Open archive", OnOpenArchiveAsync), 0));
-        toolbar.Children.Add(Place(_extractSelectedButton, 1));
-        toolbar.Children.Add(Place(_extractAllButton, 2));
-        toolbar.Children.Add(Place(_archiveText, 3));
-        toolbar.Children.Add(Place(_filterBox, 4));
-        toolbar.Children.Add(Place(CreateButton("Formats", OnShowFormats), 5));
+        toolbar.Children.Add(Place(CreateButton("Open archive", OnOpenArchiveAsync, 112), 0));
+        toolbar.Children.Add(Place(CreateButton("Open folder", OnOpenFolderAsync, 106), 1));
+        toolbar.Children.Add(Place(_upButton, 2));
+        toolbar.Children.Add(Place(_extractSelectedButton, 3));
+        toolbar.Children.Add(Place(_extractAllButton, 4));
+        toolbar.Children.Add(Place(_convertImageButton, 5));
+        toolbar.Children.Add(Place(_convertFormatBox, 6));
+        toolbar.Children.Add(Place(_openExternalButton, 7));
+        toolbar.Children.Add(Place(_cancelButton, 8));
+        toolbar.Children.Add(Place(CreateButton("Formats", OnShowFormatsAsync, 82), 9));
+        toolbar.Children.Add(Place(_locationText, 10));
         root.Children.Add(Place(toolbar, 0, 0));
 
-        var output = new Grid
+        var options = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto"),
             Margin = new Thickness(12, 0, 12, 12),
             ColumnSpacing = 8
         };
-        output.Children.Add(Place(new TextBlock
+        options.Children.Add(Place(new TextBlock
         {
             Text = "Output",
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = FontWeight.SemiBold
         }, 0));
-        output.Children.Add(Place(_outputBox, 1));
-        output.Children.Add(Place(CreateButton("Choose", OnChooseOutputAsync), 2));
-        root.Children.Add(Place(output, 1, 0));
+        options.Children.Add(Place(_outputBox, 1));
+        options.Children.Add(Place(CreateButton("Choose", OnChooseOutputAsync, 82), 2));
+        options.Children.Add(Place(new TextBlock
+        {
+            Text = "Access",
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeight.SemiBold
+        }, 3));
+        options.Children.Add(Place(_passwordBox, 4));
+        options.Children.Add(Place(_filterBox, 5));
+        root.Children.Add(Place(options, 1, 0));
 
+        var body = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,360"),
+            Margin = new Thickness(12, 0, 12, 12),
+            ColumnSpacing = 12
+        };
         var listFrame = new Border
         {
             BorderBrush = new SolidColorBrush(Color.FromRgb(210, 214, 220)),
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(12, 0, 12, 12),
             Child = _entryList
         };
-        root.Children.Add(Place(listFrame, 2, 0));
+        body.Children.Add(Place(listFrame, 0));
+        body.Children.Add(Place(_previewHost, 1));
+        root.Children.Add(Place(body, 2, 0));
 
-        var status = new Border
+        var statusGrid = new Grid
         {
+            ColumnDefinitions = new ColumnDefinitions("*,220"),
+            ColumnSpacing = 12,
             Background = new SolidColorBrush(Color.FromRgb(245, 246, 248)),
-            Padding = new Thickness(12, 6),
-            Child = _statusText
+            Margin = new Thickness(0),
         };
-        root.Children.Add(Place(status, 3, 0));
+        statusGrid.Children.Add(Place(_statusText, 0));
+        statusGrid.Children.Add(Place(_progressBar, 1));
+        root.Children.Add(Place(statusGrid, 3, 0));
 
         return root;
     }
@@ -144,9 +231,28 @@ public sealed class MainWindow : Window
         {
             SelectionMode = SelectionMode.Multiple,
             ItemsSource = _entries,
-            ItemTemplate = new FuncDataTemplate<ArchiveEntryItem>((item, _) => CreateEntryRow())
+            ItemTemplate = new FuncDataTemplate<ArchiveEntryItem>((_, _) => CreateEntryRow())
         };
+        list.SelectionChanged += async (_, _) => await PreviewSelectionAsync();
+        list.DoubleTapped += async (_, _) => await OnItemDefaultActionAsync();
+        list.ContextMenu = BuildContextMenu();
         return list;
+    }
+
+    private ContextMenu BuildContextMenu()
+    {
+        var preview = new MenuItem { Header = "Preview" };
+        preview.Click += async (_, _) => await PreviewSelectionAsync(force: true);
+        var extract = new MenuItem { Header = "Extract selected" };
+        extract.Click += async (_, _) => await OnExtractSelectedAsync();
+        var convert = new MenuItem { Header = "Convert image" };
+        convert.Click += async (_, _) => await OnConvertImageAsync();
+        var external = new MenuItem { Header = "Open external" };
+        external.Click += async (_, _) => await OnOpenExternalAsync();
+        return new ContextMenu
+        {
+            ItemsSource = new[] { preview, extract, convert, external }
+        };
     }
 
     private static Control CreateEntryRow()
@@ -162,7 +268,6 @@ public sealed class MainWindow : Window
         grid.Children.Add(Place(BoundText(nameof(ArchiveEntryItem.Type), TextTrimming.None), 1));
         grid.Children.Add(Place(BoundText(nameof(ArchiveEntryItem.SizeText), TextTrimming.None), 2));
         grid.Children.Add(Place(BoundText(nameof(ArchiveEntryItem.OffsetText), TextTrimming.None), 3));
-
         return grid;
     }
 
@@ -177,27 +282,15 @@ public sealed class MainWindow : Window
         return text;
     }
 
-    private static Button CreateButton(string text, Func<Task> onClick)
+    private static Button CreateButton(string text, Func<Task> onClick, double minWidth)
     {
         var button = new Button
         {
             Content = text,
-            MinWidth = 108,
+            MinWidth = minWidth,
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
         button.Click += async (_, _) => await onClick();
-        return button;
-    }
-
-    private static Button CreateButton(string text, Action onClick)
-    {
-        var button = new Button
-        {
-            Content = text,
-            MinWidth = 92,
-            HorizontalContentAlignment = HorizontalAlignment.Center
-        };
-        button.Click += (_, _) => onClick();
         return button;
     }
 
@@ -215,6 +308,19 @@ public sealed class MainWindow : Window
         }
     }
 
+    private async Task OnOpenFolderAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Open folder"
+        });
+        var folder = folders.FirstOrDefault()?.Path.LocalPath;
+        if (!string.IsNullOrWhiteSpace(folder))
+        {
+            NavigateDirectory(folder);
+        }
+    }
+
     private async Task OnChooseOutputAsync()
     {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
@@ -228,6 +334,114 @@ public sealed class MainWindow : Window
         }
     }
 
+    private Task OnShowFormatsAsync()
+    {
+        var count = FormatCatalog.Instance.ArcFormats.Count();
+        SetStatus($"{count} archive formats loaded.");
+        return Task.CompletedTask;
+    }
+
+    private Task OnCancelAsync()
+    {
+        _cancelSource?.Cancel();
+        SetStatus("Cancel requested. Current file will finish, then extraction stops.");
+        return Task.CompletedTask;
+    }
+
+    private Task OnUpAsync()
+    {
+        if (_mode == ViewMode.Directory)
+        {
+            var parent = Directory.GetParent(_currentDirectory);
+            if (parent != null)
+            {
+                NavigateDirectory(parent.FullName);
+            }
+        }
+        else if (!string.IsNullOrEmpty(_archivePath))
+        {
+            var parent = Path.GetDirectoryName(_archivePath);
+            if (!string.IsNullOrEmpty(parent))
+            {
+                NavigateDirectory(parent);
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    private void OpenInitialPath(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            NavigateDirectory(path);
+        }
+        else if (File.Exists(path))
+        {
+            OpenArchive(path);
+        }
+        else
+        {
+            NavigateDirectory(Environment.CurrentDirectory);
+            SetStatus($"Path not found: {path}");
+        }
+    }
+
+    private void NavigateDirectory(string path)
+    {
+        try
+        {
+            var directory = new DirectoryInfo(path);
+            if (!directory.Exists)
+            {
+                SetStatus($"Folder not found: {path}");
+                return;
+            }
+
+            _archive?.Dispose();
+            _archive = null;
+            _archivePath = null;
+            _currentDirectory = directory.FullName;
+            _mode = ViewMode.Directory;
+            _locationText.Text = _currentDirectory;
+            _filterBox.Text = "";
+            LoadDirectory(directory);
+            SetPreviewMessage("Select a file to preview. Double-click a folder to enter or an archive to open.");
+            SetStatus($"Opened folder: {_currentDirectory}");
+            UpdateActions();
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Open folder failed: {ex.Message}");
+        }
+    }
+
+    private void LoadDirectory(DirectoryInfo directory)
+    {
+        var items = new List<ArchiveEntryItem>();
+        if (directory.Parent != null)
+        {
+            items.Add(ArchiveEntryItem.FromDirectory(directory.Parent, isParent: true));
+        }
+
+        try
+        {
+            items.AddRange(directory.EnumerateDirectories()
+                .Where(d => !d.Attributes.HasFlag(FileAttributes.System))
+                .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(d => ArchiveEntryItem.FromDirectory(d)));
+            items.AddRange(directory.EnumerateFiles()
+                .Where(f => !f.Attributes.HasFlag(FileAttributes.System))
+                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(f => ArchiveEntryItem.FromFile(f)));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetStatus(ex.Message);
+        }
+
+        LoadItems(items);
+    }
+
     private void OpenArchive(string path)
     {
         try
@@ -238,6 +452,7 @@ public sealed class MainWindow : Window
                 return;
             }
 
+            LinuxRuntimeOptions.Password = _passwordBox.Text;
             var nextArchive = ArcFile.TryOpen(path);
             if (nextArchive == null)
             {
@@ -248,11 +463,18 @@ public sealed class MainWindow : Window
             _archive?.Dispose();
             _archive = nextArchive;
             _archivePath = path;
-            _archiveText.Text = path;
+            _currentDirectory = Path.GetDirectoryName(path);
+            _mode = ViewMode.Archive;
+            _locationText.Text = path;
             _filterBox.Text = "";
-            LoadEntries(_archive.Dir);
-            SetArchiveActionsEnabled(true);
+            LoadArchiveEntries(_archive.Dir);
+            SetPreviewMessage("Select an entry to preview. Use Extract buttons to write files.");
             SetStatus($"Opened {Path.GetFileName(path)}: {_entries.Count} entries, {_archive.Description}");
+            UpdateActions();
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Open cancelled. Try entering a password/key and reopening the archive.");
         }
         catch (Exception ex)
         {
@@ -260,38 +482,174 @@ public sealed class MainWindow : Window
         }
     }
 
-    private void LoadEntries(IEnumerable<Entry> source)
+    private void LoadArchiveEntries(IEnumerable<Entry> source)
+    {
+        LoadItems(source.OrderBy(e => e.Offset).Select(ArchiveEntryItem.FromEntry));
+    }
+
+    private void LoadItems(IEnumerable<ArchiveEntryItem> source)
     {
         _entries.Clear();
-        foreach (var entry in source.OrderBy(e => e.Offset).Select(e => new ArchiveEntryItem(e)))
+        foreach (var item in ApplyTextFilter(source))
         {
-            _entries.Add(entry);
+            _entries.Add(item);
         }
+        UpdateActions();
+    }
+
+    private IEnumerable<ArchiveEntryItem> ApplyTextFilter(IEnumerable<ArchiveEntryItem> source)
+    {
+        var filter = _filterBox.Text;
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            return source;
+        }
+        return source.Where(e => e.Name.Contains(filter, StringComparison.OrdinalIgnoreCase));
     }
 
     private void ApplyFilter()
     {
-        if (_archive == null)
+        if (_mode == ViewMode.Archive && _archive != null)
+        {
+            LoadArchiveEntries(_archive.Dir);
+            SetStatus($"{_entries.Count} entries shown");
+        }
+        else if (_mode == ViewMode.Directory && !string.IsNullOrEmpty(_currentDirectory))
+        {
+            LoadDirectory(new DirectoryInfo(_currentDirectory));
+            SetStatus($"{_entries.Count} items shown");
+        }
+    }
+
+    private async Task OnItemDefaultActionAsync()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null)
         {
             return;
         }
 
-        var filter = _filterBox.Text;
-        var source = _archive.Dir.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(filter))
+        if (item.IsDirectory)
         {
-            source = source.Where(e => e.Name.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            NavigateDirectory(item.FullPath);
         }
-        LoadEntries(source);
-        SetStatus($"{_entries.Count} entries shown");
+        else if (item.IsFileSystemItem)
+        {
+            OpenArchive(item.FullPath);
+        }
+        else
+        {
+            await PreviewSelectionAsync(force: true);
+        }
+    }
+
+    private async Task PreviewSelectionAsync(bool force = false)
+    {
+        var selected = GetSelectedItems();
+        UpdateActions();
+        if (selected.Count == 0)
+        {
+            SetPreviewMessage("No selection.");
+            return;
+        }
+        if (selected.Count > 1 && !force)
+        {
+            SetPreviewMessage($"{selected.Count} items selected.");
+            return;
+        }
+
+        var item = selected[0];
+        if (item.IsDirectory)
+        {
+            SetPreviewMessage("Folder. Double-click to open.");
+            return;
+        }
+
+        try
+        {
+            string imageError = null;
+            var data = await ReadItemBytesAsync(item, maxBytes: 64 * 1024 * 1024);
+            if (data == null)
+            {
+                SetPreviewMessage("File is too large for preview.");
+                return;
+            }
+
+            if (MediaTools.IsLikelyImage(item.Name) && MediaTools.TryCreateBitmap(data, out var bitmap, out imageError))
+            {
+                SetImagePreview(bitmap, item.Name);
+                return;
+            }
+
+            if (MediaTools.IsLikelyText(item.Name) || !MediaTools.LooksBinary(data))
+            {
+                SetTextPreview(MediaTools.DecodeTextPreview(data));
+                return;
+            }
+
+            if (MediaTools.IsLikelyExternalMedia(item.Name))
+            {
+                SetPreviewMessage("Media file. Use Open external to play with the desktop handler.");
+                return;
+            }
+
+            SetPreviewMessage(MediaTools.IsLikelyImage(item.Name)
+                ? $"Image preview failed: {imageError}"
+                : "Binary file. Use Extract or Open external.");
+        }
+        catch (Exception ex)
+        {
+            SetPreviewMessage($"Preview failed: {ex.Message}");
+        }
+    }
+
+    private async Task<byte[]> ReadItemBytesAsync(ArchiveEntryItem item, long maxBytes = long.MaxValue)
+    {
+        if (item.Size > maxBytes)
+        {
+            return null;
+        }
+
+        await using var stream = OpenItemStream(item);
+        if (stream == null)
+        {
+            return null;
+        }
+        if (stream.CanSeek && stream.Length > maxBytes)
+        {
+            return null;
+        }
+
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory);
+        return memory.ToArray();
+    }
+
+    private Stream OpenItemStream(ArchiveEntryItem item)
+    {
+        if (item.IsArchiveEntry)
+        {
+            return _archive?.OpenEntry(item.Entry);
+        }
+        if (item.IsFileSystemItem && !item.IsDirectory)
+        {
+            return File.OpenRead(item.FullPath);
+        }
+        return null;
     }
 
     private async Task OnExtractSelectedAsync()
     {
-        var selected = _entryList.SelectedItems?.OfType<ArchiveEntryItem>().Select(i => i.Entry).ToList();
-        if (selected == null || selected.Count == 0)
+        if (_mode != ViewMode.Archive)
         {
-            SetStatus("Select one or more entries first.");
+            SetStatus("Open an archive before extracting.");
+            return;
+        }
+
+        var selected = GetSelectedItems().Where(i => i.IsArchiveEntry).Select(i => i.Entry).ToList();
+        if (selected.Count == 0)
+        {
+            SetStatus("Select one or more archive entries first.");
             return;
         }
         await ExtractAsync(selected, $"Extracted {selected.Count} selected entries");
@@ -301,6 +659,7 @@ public sealed class MainWindow : Window
     {
         if (_archive == null)
         {
+            SetStatus("Open an archive before extracting.");
             return;
         }
         await ExtractAsync(_archive.Dir.OrderBy(e => e.Offset).ToList(), $"Extracted {_archive.Dir.Count} entries");
@@ -308,8 +667,83 @@ public sealed class MainWindow : Window
 
     private async Task ExtractAsync(IReadOnlyList<Entry> entries, string doneMessage)
     {
+        var outputDir = _outputBox.Text;
         if (_archive == null || entries.Count == 0)
         {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(outputDir))
+        {
+            SetStatus("Choose an output folder first.");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var existing = entries.Count(e => File.Exists(BuildOutputPath(outputDir, e.Name)));
+            var overwrite = OverwriteChoice.Overwrite;
+            if (existing > 0)
+            {
+                overwrite = await AskOverwriteAsync(existing);
+                if (overwrite == OverwriteChoice.Cancel)
+                {
+                    SetStatus("Extraction cancelled.");
+                    return;
+                }
+            }
+
+            _cancelSource = new CancellationTokenSource();
+            SetBusy(true, entries.Count);
+            var extracted = 0;
+            var skipped = 0;
+            await Task.Run(async () =>
+            {
+                for (var i = 0; i < entries.Count; ++i)
+                {
+                    _cancelSource.Token.ThrowIfCancellationRequested();
+                    var entry = entries[i];
+                    var destination = BuildOutputPath(outputDir, entry.Name);
+                    if (overwrite == OverwriteChoice.Skip && File.Exists(destination))
+                    {
+                        ++skipped;
+                        await Dispatcher.UIThread.InvokeAsync(() => UpdateProgress(i + 1, entries.Count, $"Skipped existing: {entry.Name}"));
+                        continue;
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination));
+                    await using var input = _archive.OpenEntry(entry);
+                    await using var output = File.Create(destination);
+                    await input.CopyToAsync(output, _cancelSource.Token);
+                    ++extracted;
+                    await Dispatcher.UIThread.InvokeAsync(() => UpdateProgress(i + 1, entries.Count, $"Extracted {entry.Name}"));
+                }
+            });
+
+            SetStatus($"{doneMessage} to {outputDir}. {extracted} written, {skipped} skipped.");
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Extraction cancelled.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Extract failed: {ex.Message}");
+        }
+        finally
+        {
+            _cancelSource?.Dispose();
+            _cancelSource = null;
+            SetBusy(false, 1);
+        }
+    }
+
+    private async Task OnConvertImageAsync()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null || item.IsDirectory)
+        {
+            SetStatus("Select one image first.");
             return;
         }
 
@@ -320,64 +754,216 @@ public sealed class MainWindow : Window
             return;
         }
 
+        var format = _convertFormatBox.SelectedItem?.ToString() ?? "png";
+        var targetName = Path.ChangeExtension(item.Name, format);
+        var destination = BuildOutputPath(outputDir, targetName);
         try
         {
-            Directory.CreateDirectory(outputDir);
-            SetBusy(true);
-            SetStatus($"Extracting to {outputDir} ...");
-
-            await Task.Run(() =>
+            Directory.CreateDirectory(Path.GetDirectoryName(destination));
+            if (File.Exists(destination) && await AskOverwriteAsync(1) != OverwriteChoice.Overwrite)
             {
-                var original = Directory.GetCurrentDirectory();
-                Directory.SetCurrentDirectory(outputDir);
-                try
-                {
-                    for (var i = 0; i < entries.Count; ++i)
-                    {
-                        var entry = entries[i];
-                        Dispatcher.UIThread.Post(() => SetStatus($"Extracting {i + 1}/{entries.Count}: {entry.Name}"));
-                        _archive.Extract(entry);
-                    }
-                }
-                finally
-                {
-                    Directory.SetCurrentDirectory(original);
-                }
-            });
+                SetStatus("Image conversion skipped.");
+                return;
+            }
 
-            SetStatus($"{doneMessage} to {outputDir}");
+            var data = await ReadItemBytesAsync(item);
+            await using var output = File.Create(destination);
+            if (!MediaTools.TryConvertImage(data, output, format, out var error))
+            {
+                SetStatus($"Image conversion failed: {error}");
+                return;
+            }
+            SetStatus($"Converted image to {destination}");
         }
         catch (Exception ex)
         {
-            SetStatus($"Extract failed: {ex.Message}");
+            SetStatus($"Image conversion failed: {ex.Message}");
         }
-        finally
+    }
+
+    private async Task OnOpenExternalAsync()
+    {
+        var item = GetSingleSelectedItem();
+        if (item == null || item.IsDirectory)
         {
-            SetBusy(false);
+            SetStatus("Select one file first.");
+            return;
+        }
+
+        try
+        {
+            string path;
+            if (item.IsFileSystemItem)
+            {
+                path = item.FullPath;
+            }
+            else
+            {
+                path = Path.Combine(Path.GetTempPath(), "garbro-linux-preview", Guid.NewGuid() + "-" + MediaTools.SafeFileName(item.Name));
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                await using var input = _archive.OpenEntry(item.Entry);
+                await using var output = File.Create(path);
+                await input.CopyToAsync(output);
+            }
+            MediaTools.OpenWithDesktop(path);
+            SetStatus($"Opened externally: {path}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Open external failed: {ex.Message}");
         }
     }
 
-    private void OnShowFormats()
+    private async Task<OverwriteChoice> AskOverwriteAsync(int existingCount)
     {
-        var count = FormatCatalog.Instance.ArcFormats.Count();
-        SetStatus($"{count} archive formats loaded. Use the filter box to narrow entries after opening an archive.");
+        var dialog = new ChoiceDialog(
+            "Existing files",
+            $"{existingCount} output file(s) already exist.",
+            ("Overwrite", OverwriteChoice.Overwrite),
+            ("Skip", OverwriteChoice.Skip),
+            ("Cancel", OverwriteChoice.Cancel));
+        return await dialog.ShowDialog<OverwriteChoice>(this);
     }
 
-    private void SetArchiveActionsEnabled(bool enabled)
+    private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        _extractSelectedButton.IsEnabled = enabled;
-        _extractAllButton.IsEnabled = enabled;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.O)
+        {
+            e.Handled = true;
+            _ = OnOpenArchiveAsync();
+        }
+        else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.E)
+        {
+            e.Handled = true;
+            _ = OnExtractSelectedAsync();
+        }
+        else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.F)
+        {
+            e.Handled = true;
+            _filterBox.Focus();
+        }
+        else if (e.Key == Key.Back)
+        {
+            e.Handled = true;
+            _ = OnUpAsync();
+        }
+        else if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            _ = OnItemDefaultActionAsync();
+        }
+        else if (e.Key == Key.Escape && _cancelSource != null)
+        {
+            e.Handled = true;
+            _cancelSource.Cancel();
+        }
     }
 
-    private void SetBusy(bool busy)
+    private List<ArchiveEntryItem> GetSelectedItems()
     {
-        _extractSelectedButton.IsEnabled = !busy && _archive != null;
-        _extractAllButton.IsEnabled = !busy && _archive != null;
+        return _entryList.SelectedItems?.OfType<ArchiveEntryItem>().ToList() ?? new List<ArchiveEntryItem>();
+    }
+
+    private ArchiveEntryItem GetSingleSelectedItem()
+    {
+        return GetSelectedItems().FirstOrDefault();
+    }
+
+    private void UpdateActions()
+    {
+        var selected = GetSelectedItems();
+        var hasArchive = _mode == ViewMode.Archive && _archive != null;
+        var singleFile = selected.Count == 1 && !selected[0].IsDirectory;
+        _upButton.IsEnabled = _mode == ViewMode.Archive || Directory.GetParent(_currentDirectory ?? "") != null;
+        _extractSelectedButton.IsEnabled = hasArchive && selected.Any(i => i.IsArchiveEntry) && _cancelSource == null;
+        _extractAllButton.IsEnabled = hasArchive && _cancelSource == null;
+        _convertImageButton.IsEnabled = singleFile && _cancelSource == null;
+        _openExternalButton.IsEnabled = singleFile && _cancelSource == null;
+    }
+
+    private void SetBusy(bool busy, int maximum)
+    {
+        _cancelButton.IsEnabled = busy;
+        _progressBar.IsVisible = busy;
+        _progressBar.Value = 0;
+        _progressBar.Maximum = Math.Max(1, maximum);
+        UpdateActions();
+    }
+
+    private void UpdateProgress(int current, int total, string text)
+    {
+        _progressBar.Maximum = Math.Max(1, total);
+        _progressBar.Value = current;
+        SetStatus(text);
+    }
+
+    private void SetImagePreview(Bitmap bitmap, string name)
+    {
+        _previewHost.Child = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*"),
+            Children =
+            {
+                Place(new TextBlock
+                {
+                    Text = name,
+                    FontWeight = FontWeight.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 8),
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                }, 0, 0),
+                Place(new ScrollViewer
+                {
+                    Content = new Image
+                    {
+                        Source = bitmap,
+                        Stretch = Stretch.Uniform,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        VerticalAlignment = VerticalAlignment.Stretch
+                    }
+                }, 1, 0)
+            }
+        };
+    }
+
+    private void SetTextPreview(string text)
+    {
+        _previewHost.Child = new TextBox
+        {
+            Text = text,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            FontFamily = FontFamily.Parse("monospace")
+        };
+    }
+
+    private void SetPreviewMessage(string message)
+    {
+        _previewHost.Child = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = new SolidColorBrush(Color.FromRgb(80, 86, 96))
+        };
     }
 
     private void SetStatus(string text)
     {
         _statusText.Text = text;
+    }
+
+    private static string BuildOutputPath(string outputDir, string entryName)
+    {
+        var root = Path.GetFullPath(outputDir);
+        var parts = entryName.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => p != "." && p != "..");
+        var path = parts.Aggregate(root, Path.Combine);
+        path = Path.GetFullPath(path);
+        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) && path != root)
+        {
+            throw new InvalidOperationException($"Unsafe output path: {entryName}");
+        }
+        return path;
     }
 
     private static T Place<T>(T control, int column) where T : Control
@@ -391,5 +977,51 @@ public sealed class MainWindow : Window
         Grid.SetRow(control, row);
         Grid.SetColumn(control, column);
         return control;
+    }
+
+    private sealed class ChoiceDialog : Window
+    {
+        public ChoiceDialog(string title, string message, params (string Label, OverwriteChoice Choice)[] choices)
+        {
+            Title = title;
+            Width = 360;
+            Height = 160;
+            CanResize = false;
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Spacing = 8
+            };
+            foreach (var (label, choice) in choices)
+            {
+                var button = new Button
+                {
+                    Content = label,
+                    MinWidth = 84,
+                    HorizontalContentAlignment = HorizontalAlignment.Center
+                };
+                button.Click += (_, _) => Close(choice);
+                buttons.Children.Add(button);
+            }
+
+            Content = new Grid
+            {
+                RowDefinitions = new RowDefinitions("*,Auto"),
+                Margin = new Thickness(16),
+                Children =
+                {
+                    Place(new TextBlock
+                    {
+                        Text = message,
+                        TextWrapping = TextWrapping.Wrap,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }, 0, 0),
+                    Place(buttons, 1, 0)
+                }
+            };
+        }
     }
 }

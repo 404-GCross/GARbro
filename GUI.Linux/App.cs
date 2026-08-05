@@ -47,9 +47,9 @@ public sealed class App : Application
             }
         }
 
-        catalog.ParametersRequest += (_, args) =>
+        catalog.ParametersRequest += (sender, args) =>
         {
-            args.InputResult = false;
+            LinuxRuntimeOptions.TryApplyDefaultOptions(sender, args);
         };
     }
 }

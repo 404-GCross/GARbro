@@ -25,19 +25,20 @@ projects plus a small Avalonia GUI.
 - `GUI.Linux/GARbro.GUI.Linux.csproj`
   - SDK-style `net8.0` Avalonia GUI entry point.
   - References the same portable `GameRes` and `ArcFormats` projects.
-  - Provides archive opening, entry filtering, selected extraction, and full
-    extraction on Linux.
+  - Provides folder browsing, archive opening, entry filtering, preview,
+    selected/full extraction, overwrite handling, cancellation, external media
+    opening, and common image conversion on Linux.
 
 Build command, once the .NET SDK is available:
 
 ```sh
 dotnet build Console/GARbro.Console.Portable.csproj -c Release
 dotnet publish Console/GARbro.Console.Portable.csproj -c Release -r linux-x64 \
-  --self-contained false -o artifacts/linux-portable
+  --self-contained true -p:PublishSingleFile=false -o artifacts/linux-portable
 
 dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release
 dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release -r linux-x64 \
-  --self-contained false -o artifacts/linux-gui
+  --self-contained true -p:PublishSingleFile=false -o artifacts/linux-gui
 ```
 
 On this Fedora machine, `dotnet-host` was installed without a matching SDK and
@@ -65,40 +66,49 @@ The Linux build is wired into:
 ```
 
 It runs on `ubuntu-latest`, installs .NET 8 with `actions/setup-dotnet`, builds
-the Linux CLI and GUI projects, publishes framework-dependent `linux-x64`
-outputs, uploads artifacts, and updates the fixed `dev` prerelease tag with:
+the Linux CLI and GUI projects, publishes self-contained `linux-x64`
+outputs, runs CLI archive/conversion smoke tests plus a GUI xvfb startup smoke
+test, uploads artifacts, and updates the fixed `dev` prerelease tag with:
 
 - `GARbro-Linux-GUI.zip`
 - `GARbro-Linux-Portable.zip`
 
 ## Current scope
 
-The current target is a native Linux GUI plus CLI that can list and extract
-archive entries as raw files. The GUI command is:
+The current target is a native Linux GUI plus CLI that can browse folders, open
+archives, list and extract archive entries, preview common image/text entries,
+open media through the desktop handler, cancel multi-file extraction, skip or
+overwrite existing outputs, and convert common images to PNG/JPG/WebP. The GUI
+command is:
 
 ```sh
 artifacts/linux-gui/GARbro.GUI.Linux
+# optional desktop entry
+sh artifacts/linux-gui/install-desktop.sh
 ```
 
 The CLI has been smoke-tested with:
 
 ```sh
-dotnet artifacts/linux-portable/GARbro.Console.dll -l
-dotnet artifacts/linux-portable/GARbro.Console.dll sample.zip
+./artifacts/linux-portable/GARbro.Console -l
+./artifacts/linux-portable/GARbro.Console sample.zip
+./artifacts/linux-portable/GARbro.Console -x -c jpg sample.zip
 ```
 
 Current local verification:
 
 - `dotnet build Console/GARbro.Console.Portable.csproj -c Release` succeeds.
 - `dotnet build GUI.Linux/GARbro.GUI.Linux.csproj -c Release` succeeds.
-- `dotnet publish ... -r linux-x64 --self-contained false` succeeds.
+- `dotnet publish ... -r linux-x64 --self-contained true` succeeds.
 - `-l` reports 363 archive formats.
-- A test ZIP archive lists successfully from the published output.
-- The GUI publish output includes Avalonia, SkiaSharp native libraries, and
-  `GameData`.
+- Test ZIP archives list and extract successfully from the published output.
+- CLI conversion from PNG to JPG succeeds from the published output.
+- The GUI publish output includes the .NET runtime, Avalonia, SkiaSharp native
+  libraries, desktop integration files, and `GameData`.
 
-Image conversion, image preview, and audio playback are still deliberately left
-out of this slice.
+Current remaining gaps: proprietary image decoders are still mostly excluded
+from the portable `ArcFormats` set, and in-app audio playback is delegated to
+the desktop handler instead of an embedded player.
 
 ## Platform boundary
 
@@ -136,14 +146,24 @@ including ZIP, NScripter NSA/SAR, and KiriKiri XP3 for non-interactive/no-crypt
 or known-scheme cases. Formats that need a password or GUI-only option dialog
 should be restored by adding CLI/default option handling first.
 
+For upstream merges, run:
+
+```sh
+tools/linux-port-audit.sh
+```
+
+This lists explicitly removed archive sources and remaining WPF/Windows-heavy
+references so new upstream formats can be triaged quickly.
+
 ## Next migration steps
 
-1. Add CLI option handling for encrypted archives that currently relied on WPF
-   widgets for passwords or title/key choices.
-2. Add ImageSharp-based PNG/JPEG/BMP writers for CLI conversion.
-3. Convert selected `Image*.cs` files from `PixelFormats.*` and
-   `BitmapPalette` to `PixelFormatKind` and `ImagePalette`.
-4. Replace WPF-only archive image composition helpers with portable image
+1. Convert selected high-value proprietary `Image*.cs` files from WPF
+   `PixelFormats.*` and `BitmapPalette` to portable `PixelFormatKind` and
+   `ImagePalette`.
+2. Replace WPF-only archive image composition helpers with portable image
    composition where needed.
-5. Expand the Avalonia project with preview panes and archive-specific option
-   dialogs.
+3. Add archive-specific Avalonia option dialogs for formats whose options are
+   richer than a password/key string.
+4. Replace desktop-handler audio playback with an embedded cross-platform audio
+   pipeline if in-app playback becomes required.
+5. Add AppImage/deb/rpm packaging if the zip release is not enough.

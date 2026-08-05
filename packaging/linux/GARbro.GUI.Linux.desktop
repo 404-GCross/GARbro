@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=GARbro Linux
+Comment=Browse and extract visual novel resource archives
+Exec=GARbro.GUI.Linux %f
+Terminal=false
+Categories=Utility;Archiving;
+MimeType=application/zip;application/x-zip-compressed;application/octet-stream;
+StartupNotify=true
+Icon=utilities-file-archiver

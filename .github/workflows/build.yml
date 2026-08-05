@@ -25,6 +25,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Install GUI smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
       - name: Restore CLI
         run: dotnet restore Console/GARbro.Console.Portable.csproj -r linux-x64
 
@@ -41,10 +46,28 @@ jobs:
         run: dotnet Console/bin/Release/net8.0/GARbro.Console.dll -l
 
       - name: Publish Linux CLI
-        run: dotnet publish Console/GARbro.Console.Portable.csproj -c Release --no-restore -r linux-x64 --self-contained false -o artifacts/linux-portable
+        run: dotnet publish Console/GARbro.Console.Portable.csproj -c Release --no-restore -r linux-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/linux-portable
 
       - name: Publish Linux GUI
-        run: dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release --no-restore -r linux-x64 --self-contained false -o artifacts/linux-gui
+        run: dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release --no-restore -r linux-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/linux-gui
+
+      - name: Smoke test published CLI
+        run: |
+          ./artifacts/linux-portable/GARbro.Console -l | grep -q "Recognized resource formats"
+          mkdir -p artifacts/smoke-src artifacts/smoke-out artifacts/smoke-convert
+          printf 'hello\n' > artifacts/smoke-src/hello.txt
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAABIeJ9nAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGUExURf8AAP///0EdNBEAAAABYktHRAH/Ai3eAAAAB3RJTUUH6ggFDxQX2oQ8GAAAACV0RVh0ZGF0ZTpjcmVhdGUAMjAyNi0wOC0wNVQxNToyMDoyMyswMDowMKYUCqUAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjYtMDgtMDVUMTU6MjA6MjMrMDA6MDDXSbIZAAAAKHRFWHRkYXRlOnRpbWVzdGFtcAAyMDI2LTA4LTA1VDE1OjIwOjIzKzAwOjAwgFyTxgAAAAxJREFUCNdjYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg==' | base64 -d > artifacts/smoke-src/pixel.png
+          (cd artifacts/smoke-src && zip -q sample.zip hello.txt pixel.png)
+          ./artifacts/linux-portable/GARbro.Console artifacts/smoke-src/sample.zip | grep -q hello.txt
+          (cd artifacts/smoke-out && ../linux-portable/GARbro.Console -x ../smoke-src/sample.zip)
+          test "$(cat artifacts/smoke-out/hello.txt)" = "hello"
+          (cd artifacts/smoke-convert && ../linux-portable/GARbro.Console -x -c jpg ../smoke-src/sample.zip)
+          test -s artifacts/smoke-convert/pixel.jpg
+
+      - name: Smoke test published GUI
+        run: |
+          chmod +x artifacts/linux-gui/GARbro.GUI.Linux artifacts/linux-gui/install-desktop.sh
+          xvfb-run -a timeout 8s ./artifacts/linux-gui/GARbro.GUI.Linux artifacts/smoke-src/sample.zip || test $? -eq 124
 
       - name: Package Linux portable
         run: |
@@ -85,8 +108,8 @@ jobs:
             Automated Linux prerelease from `${{ github.sha }}`.
 
             Assets:
-            - GARbro-Linux-GUI.zip: Avalonia Linux GUI.
-            - GARbro-Linux-Portable.zip: command-line portable build.
+            - GARbro-Linux-GUI.zip: self-contained Avalonia Linux GUI.
+            - GARbro-Linux-Portable.zip: self-contained command-line build.
           prerelease: true
           make_latest: false
           overwrite_files: true

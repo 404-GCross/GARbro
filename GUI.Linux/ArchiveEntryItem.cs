@@ -1,30 +1,71 @@
+using System;
+using System.IO;
 using GameRes;
 
 namespace GARbro.GUI.Linux;
 
 public sealed class ArchiveEntryItem
 {
-    public ArchiveEntryItem(Entry entry)
+    private ArchiveEntryItem()
     {
-        Entry = entry;
-        Name = entry.Name;
-        Type = string.IsNullOrWhiteSpace(entry.Type) ? "file" : entry.Type;
-        Size = entry.Size;
-        Offset = entry.Offset;
     }
 
-    public Entry Entry { get; }
-    public string Name { get; }
-    public string Type { get; }
-    public uint Size { get; }
-    public long Offset { get; }
-    public string SizeText => FormatSize(Size);
-    public string OffsetText => Offset < 0 ? "" : $"0x{Offset:X8}";
+    public Entry Entry { get; private set; }
+    public string FullPath { get; private set; }
+    public string Name { get; private set; }
+    public string Type { get; private set; }
+    public long Size { get; private set; }
+    public long Offset { get; private set; }
+    public bool IsArchiveEntry { get; private set; }
+    public bool IsDirectory { get; private set; }
+    public bool IsParentDirectory { get; private set; }
+    public bool IsFileSystemItem { get { return !string.IsNullOrEmpty(FullPath); } }
+    public string SizeText { get { return IsDirectory ? "" : FormatSize(Size); } }
+    public string OffsetText { get { return Offset < 0 ? "" : $"0x{Offset:X8}"; } }
 
-    private static string FormatSize(uint size)
+    public static ArchiveEntryItem FromEntry(Entry entry)
+    {
+        return new ArchiveEntryItem
+        {
+            Entry = entry,
+            Name = entry.Name,
+            Type = string.IsNullOrWhiteSpace(entry.Type) ? "file" : entry.Type,
+            Size = entry.Size,
+            Offset = entry.Offset,
+            IsArchiveEntry = true
+        };
+    }
+
+    public static ArchiveEntryItem FromDirectory(DirectoryInfo directory, bool isParent = false)
+    {
+        return new ArchiveEntryItem
+        {
+            FullPath = directory.FullName,
+            Name = isParent ? ".." : directory.Name,
+            Type = "folder",
+            Size = 0,
+            Offset = -1,
+            IsDirectory = true,
+            IsParentDirectory = isParent
+        };
+    }
+
+    public static ArchiveEntryItem FromFile(FileInfo file)
+    {
+        return new ArchiveEntryItem
+        {
+            FullPath = file.FullName,
+            Name = file.Name,
+            Type = string.IsNullOrWhiteSpace(file.Extension) ? "file" : file.Extension.TrimStart('.').ToLowerInvariant(),
+            Size = file.Length,
+            Offset = -1
+        };
+    }
+
+    private static string FormatSize(long size)
     {
         string[] units = { "B", "KB", "MB", "GB" };
-        double value = size;
+        double value = Math.Max(0, size);
         var unit = 0;
         while (value >= 1024 && unit < units.Length - 1)
         {

@@ -17,7 +17,7 @@ namespace GARbro
     class ConsoleBrowser
     {
         private string      m_arc_name;
-        private ImageFormat m_image_format;
+        private string      m_image_format;
         private bool        m_extract_all;
 
         void ListFormats ()
@@ -31,17 +31,8 @@ namespace GARbro
 
         void ExtractAll (ArcFile arc)
         {
-            arc.ExtractFiles ((i, entry, msg) => {
-                if (null != entry)
-                {
-                    Console.WriteLine ("Extracting {0} ...", entry.Name);
-                }
-                else if (null != msg)
-                {
-                    Console.WriteLine (msg);
-                }
-                return ArchiveOperation.Continue;
-            });
+            foreach (var entry in arc.Dir.OrderBy (e => e.Offset))
+                ExtractEntry (arc, entry);
         }
 
         void ExtractFile (ArcFile arc, string name)
@@ -51,6 +42,22 @@ namespace GARbro
             {
                 Console.Error.WriteLine ("'{0}' not found within {1}", name, m_arc_name);
                 return;
+            }
+            ExtractEntry (arc, entry);
+        }
+
+        void ExtractEntry (ArcFile arc, Entry entry)
+        {
+            if (!string.IsNullOrEmpty (m_image_format))
+            {
+                string output_name, error;
+                if (ImageConversion.TryConvert (arc, entry, m_image_format, out output_name, out error))
+                {
+                    Console.WriteLine ("Converting {0} -> {1} ...", entry.Name, output_name);
+                    return;
+                }
+                if ("not a common image extension" != error)
+                    Console.Error.WriteLine ("{0}: image conversion skipped ({1}); extracting raw file", entry.Name, error);
             }
             Console.WriteLine ("Extracting {0} ...", entry.Name);
             arc.Extract (entry);
@@ -65,12 +72,6 @@ namespace GARbro
                 Console.WriteLine ("{0:X8}", pass);
             }
 */
-        }
-
-        ImageFormat FindFormat (string format)
-        {
-            var range = FormatCatalog.Instance.LookupExtension<ImageFormat> (format);
-            return range.FirstOrDefault();
         }
 
         void Run (string[] args)
@@ -95,13 +96,13 @@ namespace GARbro
                         Usage();
                         return;
                     }
-                    var tag = args[argn+1];
-                    m_image_format = ImageFormat.FindByTag (tag);
-                    if (null == m_image_format)
+                    var tag = ImageConversion.NormalizeFormat (args[argn+1]);
+                    if (!ImageConversion.IsSupportedFormat (tag))
                     {
-                        Console.Error.WriteLine ("{0}: unknown format specified", tag);
+                        Console.Error.WriteLine ("{0}: unknown output format specified; use png, jpg, or webp", tag);
                         return;
                     }
+                    m_image_format = tag;
                     argn += 2;
                 }
                 else if (args[argn].Equals ("-x"))
@@ -180,7 +181,7 @@ namespace GARbro
             Console.WriteLine ("Usage: gameres [OPTIONS] ARC [ENTRIES]");
             Console.WriteLine ("    -l          list recognized archive formats");
             Console.WriteLine ("    -x          extract all files");
-            Console.WriteLine ("    -c FORMAT   convert images to specified format");
+            Console.WriteLine ("    -c FORMAT   convert common images to png, jpg, or webp while extracting");
             Console.WriteLine ("Without options displays contents of specified archive.");
         }
 
