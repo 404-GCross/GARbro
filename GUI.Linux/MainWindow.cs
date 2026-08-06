@@ -704,6 +704,11 @@ public sealed class MainWindow : Window
             SetPreviewMessage("Folder. Double-click to open.");
             return;
         }
+        if (IsOpenableArchiveCandidate(item))
+        {
+            SetPreviewMessage("Archive file. Double-click or press Enter to browse entries, then use Extract selected or Extract all. Extract all is also available for this selected archive.");
+            return;
+        }
 
         try
         {
@@ -799,8 +804,16 @@ public sealed class MainWindow : Window
     {
         if (_archive == null)
         {
-            SetStatus("Open an archive before extracting.");
-            return;
+            var selectedArchive = GetSelectedItems().FirstOrDefault(IsOpenableArchiveCandidate);
+            if (selectedArchive != null)
+            {
+                OpenArchive(selectedArchive.FullPath);
+            }
+            if (_archive == null)
+            {
+                SetStatus("Open an archive before extracting.");
+                return;
+            }
         }
         await ExtractAsync(_archive.Dir.OrderBy(e => e.Offset).ToList(), $"Extracted {_archive.Dir.Count} entries");
     }
@@ -1009,14 +1022,23 @@ public sealed class MainWindow : Window
         return GetSelectedItems().FirstOrDefault();
     }
 
+    private static bool IsOpenableArchiveCandidate(ArchiveEntryItem item)
+    {
+        return item != null
+            && item.IsFileSystemItem
+            && !item.IsDirectory
+            && item.Type.Equals("archive", StringComparison.OrdinalIgnoreCase);
+    }
+
     private void UpdateActions()
     {
         var selected = GetSelectedItems();
         var hasArchive = _mode == ViewMode.Archive && _archive != null;
         var singleFile = selected.Count == 1 && !selected[0].IsDirectory;
+        var selectedArchive = selected.Count == 1 && IsOpenableArchiveCandidate(selected[0]);
         _upButton.IsEnabled = _mode == ViewMode.Archive || Directory.GetParent(_currentDirectory ?? "") != null;
         _extractSelectedButton.IsEnabled = hasArchive && selected.Any(i => i.IsArchiveEntry) && _cancelSource == null;
-        _extractAllButton.IsEnabled = hasArchive && _cancelSource == null;
+        _extractAllButton.IsEnabled = (hasArchive || selectedArchive) && _cancelSource == null;
         _convertImageButton.IsEnabled = singleFile && _cancelSource == null;
         _openExternalButton.IsEnabled = singleFile && _cancelSource == null;
     }

@@ -113,6 +113,18 @@ sudo dnf install ./GARbro-Linux-GUI.rpm
 GARbro.GUI.Linux
 ```
 
+In the Linux GUI, selecting a large file only affects preview. Known archive
+files such as `.pac` can be opened with double-click/Enter, or extracted in one
+step by selecting the archive and pressing `Extract all`. The 64 MB preview
+guard remains in place for individual files so the GUI does not load very large
+binary blobs into memory just to draw the preview pane.
+
+Linux packages intentionally omit `libcoreclrtraceptprovider.so`, the optional
+.NET EventPipe tracing provider. Current Fedora repositories provide
+`liblttng-ust.so.1` instead of the older `liblttng-ust.so.0` that provider was
+built against, and including it causes RPM installation to fail even though
+GARbro does not need it for normal browsing, extraction, or conversion.
+
 The CLI has been smoke-tested with:
 
 ```sh

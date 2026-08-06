@@ -57,6 +57,11 @@ jobs:
       - name: Publish Linux GUI
         run: dotnet publish GUI.Linux/GARbro.GUI.Linux.csproj -c Release --no-restore -r linux-x64 --self-contained true -p:PublishSingleFile=false -o artifacts/linux-gui
 
+      - name: Remove optional .NET tracing provider
+        run: |
+          rm -f artifacts/linux-portable/libcoreclrtraceptprovider.so
+          rm -f artifacts/linux-gui/libcoreclrtraceptprovider.so
+
       - name: Smoke test published CLI
         run: |
           ./artifacts/linux-portable/GARbro.Console -l | grep -q "Recognized resource formats"

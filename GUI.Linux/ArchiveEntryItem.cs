@@ -52,11 +52,15 @@ public sealed class ArchiveEntryItem
 
     public static ArchiveEntryItem FromFile(FileInfo file)
     {
+        var type = FormatCatalog.Instance.GetTypeFromName(file.FullName);
+        var fallbackType = string.IsNullOrWhiteSpace(file.Extension)
+            ? "file"
+            : file.Extension.TrimStart('.').ToLowerInvariant();
         return new ArchiveEntryItem
         {
             FullPath = file.FullName,
             Name = file.Name,
-            Type = string.IsNullOrWhiteSpace(file.Extension) ? "file" : file.Extension.TrimStart('.').ToLowerInvariant(),
+            Type = string.IsNullOrWhiteSpace(type) ? fallbackType : type,
             Size = file.Length,
             Offset = -1
         };

@@ -36,6 +36,8 @@ copy_payload() {
   target=$1
   mkdir -p "$target"
   cp -a "$PUBLISH_DIR"/. "$target"/
+  # Optional .NET EventPipe tracing provider; it adds an unavailable liblttng-ust.so.0 RPM dependency on current Fedora.
+  rm -f "$target/libcoreclrtraceptprovider.so"
   chmod +x "$target/$EXECUTABLE" 2>/dev/null || true
   chmod +x "$target/install-desktop.sh" 2>/dev/null || true
 }
