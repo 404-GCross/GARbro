@@ -85,6 +85,17 @@ jobs:
           chmod +x packaging/linux/package-linux.sh
           packaging/linux/package-linux.sh artifacts/linux-gui artifacts/packages dev
 
+      - name: Verify RPM dependencies
+        run: |
+          if rpm -qpR artifacts/packages/GARbro-Linux-GUI.rpm | grep -Fq 'liblttng-ust.so.0'; then
+            rpm -qpR artifacts/packages/GARbro-Linux-GUI.rpm
+            exit 1
+          fi
+          if rpm -qlp artifacts/packages/GARbro-Linux-GUI.rpm | grep -Fq 'libcoreclrtraceptprovider.so'; then
+            rpm -qlp artifacts/packages/GARbro-Linux-GUI.rpm
+            exit 1
+          fi
+
       - name: Package Linux portable
         run: |
           cd artifacts/linux-portable
