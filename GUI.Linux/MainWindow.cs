@@ -35,13 +35,25 @@ public sealed class MainWindow : Window
         Skip
     }
 
+    private enum SortKey
+    {
+        Name,
+        Type,
+        Size,
+        Offset
+    }
+
     private readonly ObservableCollection<ArchiveEntryItem> _entries = new();
+    private readonly ObservableCollection<string> _recentPaths;
+    private readonly LinuxSettings _settings;
     private readonly TextBlock _locationText;
     private readonly TextBlock _statusText;
     private readonly TextBox _outputBox;
     private readonly TextBox _filterBox;
     private readonly TextBox _passwordBox;
     private readonly ComboBox _convertFormatBox;
+    private readonly ComboBox _recentBox;
+    private readonly ComboBox _sortBox;
     private readonly ListBox _entryList;
     private readonly Border _previewHost;
     private readonly ProgressBar _progressBar;
@@ -51,11 +63,15 @@ public sealed class MainWindow : Window
     private readonly Button _convertImageButton;
     private readonly Button _openExternalButton;
     private readonly Button _cancelButton;
+    private readonly Button _sortDirectionButton;
     private ArcFile _archive;
     private string _archivePath;
     private string _currentDirectory;
     private ViewMode _mode;
     private CancellationTokenSource _cancelSource;
+    private SortKey _sortKey = SortKey.Name;
+    private bool _sortAscending = true;
+    private bool _updatingRecent;
 
     public MainWindow(string initialPath)
     {
@@ -65,6 +81,8 @@ public sealed class MainWindow : Window
         MinWidth = 900;
         MinHeight = 560;
 
+        _settings = LinuxSettings.Load();
+        _recentPaths = new ObservableCollection<string>(_settings.ExistingRecentPaths());
         _locationText = new TextBlock
         {
             Text = "Ready",
@@ -79,7 +97,7 @@ public sealed class MainWindow : Window
         _outputBox = new TextBox
         {
             Watermark = "Extraction folder",
-            Text = Environment.CurrentDirectory,
+            Text = GetInitialOutputDirectory(),
             MinWidth = 260
         };
         _filterBox = new TextBox
@@ -97,6 +115,18 @@ public sealed class MainWindow : Window
             Width = 82,
             SelectedIndex = 0,
             ItemsSource = new[] { "png", "jpg", "webp" }
+        };
+        _recentBox = new ComboBox
+        {
+            Width = 150,
+            ItemsSource = _recentPaths,
+            SelectedIndex = -1
+        };
+        _sortBox = new ComboBox
+        {
+            Width = 104,
+            SelectedIndex = 0,
+            ItemsSource = new[] { "Name", "Type", "Size", "Offset" }
         };
         _entryList = CreateEntryList();
         _previewHost = new Border
@@ -120,11 +150,17 @@ public sealed class MainWindow : Window
         _openExternalButton = CreateButton("Open external", OnOpenExternalAsync, 112);
         _cancelButton = CreateButton("Cancel", OnCancelAsync, 76);
         _cancelButton.IsEnabled = false;
+        _sortDirectionButton = CreateButton("Asc", OnToggleSortDirectionAsync, 64);
 
         Content = BuildLayout();
         KeyDown += OnKeyDown;
         _filterBox.TextChanged += (_, _) => ApplyFilter();
         _passwordBox.TextChanged += (_, _) => LinuxRuntimeOptions.Password = _passwordBox.Text;
+        _recentBox.SelectionChanged += (_, _) => OnRecentSelectionChanged();
+        _sortBox.SelectionChanged += (_, _) => OnSortChanged();
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DropEvent, OnDrop);
         SetPreviewMessage("Open a folder or archive to begin.");
 
         if (!string.IsNullOrWhiteSpace(initialPath))
@@ -142,6 +178,13 @@ public sealed class MainWindow : Window
         _cancelSource?.Cancel();
         _archive?.Dispose();
         base.OnClosed(e);
+    }
+
+    private string GetInitialOutputDirectory()
+    {
+        return Directory.Exists(_settings.OutputDirectory)
+            ? _settings.OutputDirectory
+            : Environment.CurrentDirectory;
     }
 
     private Control BuildLayout()
@@ -173,7 +216,7 @@ public sealed class MainWindow : Window
 
         var options = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"),
             Margin = new Thickness(12, 0, 12, 12),
             ColumnSpacing = 8
         };
@@ -187,12 +230,27 @@ public sealed class MainWindow : Window
         options.Children.Add(Place(CreateButton("Choose", OnChooseOutputAsync, 82), 2));
         options.Children.Add(Place(new TextBlock
         {
-            Text = "Access",
+            Text = "Recent",
             VerticalAlignment = VerticalAlignment.Center,
             FontWeight = FontWeight.SemiBold
         }, 3));
-        options.Children.Add(Place(_passwordBox, 4));
-        options.Children.Add(Place(_filterBox, 5));
+        options.Children.Add(Place(_recentBox, 4));
+        options.Children.Add(Place(new TextBlock
+        {
+            Text = "Access",
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeight.SemiBold
+        }, 5));
+        options.Children.Add(Place(_passwordBox, 6));
+        options.Children.Add(Place(_filterBox, 7));
+        options.Children.Add(Place(new TextBlock
+        {
+            Text = "Sort",
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = FontWeight.SemiBold
+        }, 8));
+        options.Children.Add(Place(_sortBox, 9));
+        options.Children.Add(Place(_sortDirectionButton, 10));
         root.Children.Add(Place(options, 1, 0));
 
         var body = new Grid
@@ -331,7 +389,62 @@ public sealed class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(folder))
         {
             _outputBox.Text = folder;
+            _settings.OutputDirectory = folder;
+            _settings.Save();
         }
+    }
+
+    private Task OnToggleSortDirectionAsync()
+    {
+        _sortAscending = !_sortAscending;
+        UpdateSortDirectionButton();
+        ApplyFilter();
+        return Task.CompletedTask;
+    }
+
+    private void OnSortChanged()
+    {
+        if (_sortBox.SelectedIndex < 0)
+        {
+            return;
+        }
+        _sortKey = (SortKey)_sortBox.SelectedIndex;
+        ApplyFilter();
+    }
+
+    private void OnRecentSelectionChanged()
+    {
+        if (_updatingRecent)
+        {
+            return;
+        }
+
+        var path = _recentBox.SelectedItem?.ToString();
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        _recentBox.SelectedIndex = -1;
+        OpenInitialPath(path);
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.DragEffects = GetFirstDroppedPath(e.Data) == null
+            ? DragDropEffects.None
+            : DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        var path = GetFirstDroppedPath(e.Data);
+        if (!string.IsNullOrWhiteSpace(path))
+        {
+            OpenInitialPath(path);
+        }
+        e.Handled = true;
     }
 
     private Task OnShowFormatsAsync()
@@ -405,6 +518,7 @@ public sealed class MainWindow : Window
             _locationText.Text = _currentDirectory;
             _filterBox.Text = "";
             LoadDirectory(directory);
+            RememberPath(_currentDirectory);
             SetPreviewMessage("Select a file to preview. Double-click a folder to enter or an archive to open.");
             SetStatus($"Opened folder: {_currentDirectory}");
             UpdateActions();
@@ -468,6 +582,7 @@ public sealed class MainWindow : Window
             _locationText.Text = path;
             _filterBox.Text = "";
             LoadArchiveEntries(_archive.Dir);
+            RememberPath(path);
             SetPreviewMessage("Select an entry to preview. Use Extract buttons to write files.");
             SetStatus($"Opened {Path.GetFileName(path)}: {_entries.Count} entries, {_archive.Description}");
             UpdateActions();
@@ -490,11 +605,36 @@ public sealed class MainWindow : Window
     private void LoadItems(IEnumerable<ArchiveEntryItem> source)
     {
         _entries.Clear();
-        foreach (var item in ApplyTextFilter(source))
+        foreach (var item in SortItems(ApplyTextFilter(source)))
         {
             _entries.Add(item);
         }
         UpdateActions();
+    }
+
+    private IEnumerable<ArchiveEntryItem> SortItems(IEnumerable<ArchiveEntryItem> source)
+    {
+        var items = source.ToList();
+        var parents = items.Where(i => i.IsParentDirectory);
+        var regular = items.Where(i => !i.IsParentDirectory);
+
+        IEnumerable<ArchiveEntryItem> sorted = _sortKey switch
+        {
+            SortKey.Type => _sortAscending
+                ? regular.OrderBy(GroupKey).ThenBy(i => i.Type, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : regular.OrderBy(GroupKey).ThenByDescending(i => i.Type, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SortKey.Size => _sortAscending
+                ? regular.OrderBy(GroupKey).ThenBy(i => i.Size).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : regular.OrderBy(GroupKey).ThenByDescending(i => i.Size).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            SortKey.Offset => _sortAscending
+                ? regular.OrderBy(GroupKey).ThenBy(NormalizedOffset).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : regular.OrderBy(GroupKey).ThenByDescending(NormalizedOffset).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase),
+            _ => _sortAscending
+                ? regular.OrderBy(GroupKey).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                : regular.OrderBy(GroupKey).ThenByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
+        };
+
+        return parents.Concat(sorted);
     }
 
     private IEnumerable<ArchiveEntryItem> ApplyTextFilter(IEnumerable<ArchiveEntryItem> source)
@@ -950,6 +1090,65 @@ public sealed class MainWindow : Window
     private void SetStatus(string text)
     {
         _statusText.Text = text;
+    }
+
+    private void RememberPath(string path)
+    {
+        _settings.RememberPath(path);
+        _settings.Save();
+        RefreshRecentPaths();
+    }
+
+    private void RefreshRecentPaths()
+    {
+        _updatingRecent = true;
+        try
+        {
+            _recentPaths.Clear();
+            foreach (var path in _settings.ExistingRecentPaths())
+            {
+                _recentPaths.Add(path);
+            }
+            _recentBox.SelectedIndex = -1;
+        }
+        finally
+        {
+            _updatingRecent = false;
+        }
+    }
+
+    private void UpdateSortDirectionButton()
+    {
+        _sortDirectionButton.Content = _sortAscending ? "Asc" : "Desc";
+    }
+
+    private static string GetFirstDroppedPath(IDataObject data)
+    {
+        var files = data.GetFiles();
+        if (files == null)
+        {
+            return null;
+        }
+
+        foreach (var item in files)
+        {
+            var path = item.Path.LocalPath;
+            if (Directory.Exists(path) || File.Exists(path))
+            {
+                return path;
+            }
+        }
+        return null;
+    }
+
+    private static int GroupKey(ArchiveEntryItem item)
+    {
+        return item.IsDirectory ? 0 : 1;
+    }
+
+    private static long NormalizedOffset(ArchiveEntryItem item)
+    {
+        return item.Offset < 0 ? long.MaxValue : item.Offset;
     }
 
     private static string BuildOutputPath(string outputDir, string entryName)

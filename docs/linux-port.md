@@ -72,19 +72,45 @@ test, uploads artifacts, and updates the fixed `dev` prerelease tag with:
 
 - `GARbro-Linux-GUI.zip`
 - `GARbro-Linux-Portable.zip`
+- `GARbro-Linux-GUI.tar.gz`
+- `GARbro-Linux-GUI.deb`
+- `GARbro-Linux-GUI.rpm`
+- `GARbro-Linux-GUI.AppImage`
+- `GARbro-Linux-GUI-AppDir.tar.gz`
 
 ## Current scope
 
 The current target is a native Linux GUI plus CLI that can browse folders, open
 archives, list and extract archive entries, preview common image/text entries,
 open media through the desktop handler, cancel multi-file extraction, skip or
-overwrite existing outputs, and convert common images to PNG/JPG/WebP. The GUI
-command is:
+overwrite existing outputs, convert common images to PNG/JPG/WebP, reopen recent
+folders/archives, accept file/folder drag-and-drop, and sort by name/type/size
+or offset. The GUI command is:
 
 ```sh
 artifacts/linux-gui/GARbro.GUI.Linux
 # optional desktop entry
 sh artifacts/linux-gui/install-desktop.sh
+```
+
+Release package usage:
+
+```sh
+# portable tarball
+tar -xzf GARbro-Linux-GUI.tar.gz
+./garbro-linux-dev/GARbro.GUI.Linux
+
+# AppImage
+chmod +x GARbro-Linux-GUI.AppImage
+./GARbro-Linux-GUI.AppImage
+
+# Debian/Ubuntu
+sudo apt install ./GARbro-Linux-GUI.deb
+GARbro.GUI.Linux
+
+# Fedora/RHEL
+sudo dnf install ./GARbro-Linux-GUI.rpm
+GARbro.GUI.Linux
 ```
 
 The CLI has been smoke-tested with:
@@ -105,10 +131,13 @@ Current local verification:
 - CLI conversion from PNG to JPG succeeds from the published output.
 - The GUI publish output includes the .NET runtime, Avalonia, SkiaSharp native
   libraries, desktop integration files, and `GameData`.
+- Local packaging creates the GUI tarball, RPM, AppDir tarball, and AppImage.
+  The GitHub Actions environment also creates the Debian package.
 
 Current remaining gaps: proprietary image decoders are still mostly excluded
-from the portable `ArcFormats` set, and in-app audio playback is delegated to
-the desktop handler instead of an embedded player.
+from the portable `ArcFormats` set, archive-specific rich option dialogs are
+not restored yet, and in-app audio playback is delegated to the desktop handler
+instead of an embedded player.
 
 ## Platform boundary
 
@@ -166,4 +195,5 @@ references so new upstream formats can be triaged quickly.
    richer than a password/key string.
 4. Replace desktop-handler audio playback with an embedded cross-platform audio
    pipeline if in-app playback becomes required.
-5. Add AppImage/deb/rpm packaging if the zip release is not enough.
+5. Add deeper GUI parity features such as archive tree grouping, batch preview
+   queues, and per-format option presets if needed.

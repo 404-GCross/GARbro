@@ -7,4 +7,4 @@ Terminal=false
 Categories=Utility;Archiving;
 MimeType=application/zip;application/x-zip-compressed;application/octet-stream;
 StartupNotify=true
-Icon=utilities-file-archiver
+Icon=garbro-linux

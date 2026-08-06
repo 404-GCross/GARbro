@@ -25,10 +25,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Install GUI smoke dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y curl rpm xvfb
+
+      - name: Download AppImage tool
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
 
       - name: Restore CLI
         run: dotnet restore Console/GARbro.Console.Portable.csproj -r linux-x64
@@ -69,6 +75,11 @@ jobs:
           chmod +x artifacts/linux-gui/GARbro.GUI.Linux artifacts/linux-gui/install-desktop.sh
           xvfb-run -a timeout 8s ./artifacts/linux-gui/GARbro.GUI.Linux artifacts/smoke-src/sample.zip || test $? -eq 124
 
+      - name: Package Linux GUI installers
+        run: |
+          chmod +x packaging/linux/package-linux.sh
+          packaging/linux/package-linux.sh artifacts/linux-gui artifacts/packages dev
+
       - name: Package Linux portable
         run: |
           cd artifacts/linux-portable
@@ -91,6 +102,12 @@ jobs:
           name: GARbro-Linux-GUI
           path: artifacts/GARbro-Linux-GUI.zip
 
+      - name: Upload GUI Package Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: GARbro-Linux-GUI-Packages
+          path: artifacts/packages/GARbro-Linux-GUI*
+
       - name: Move dev tag
         if: github.event_name == 'push'
         run: |
@@ -110,9 +127,15 @@ jobs:
             Assets:
             - GARbro-Linux-GUI.zip: self-contained Avalonia Linux GUI.
             - GARbro-Linux-Portable.zip: self-contained command-line build.
+            - GARbro-Linux-GUI.tar.gz: self-contained GUI tarball.
+            - GARbro-Linux-GUI.deb: Debian/Ubuntu GUI package.
+            - GARbro-Linux-GUI.rpm: Fedora/RHEL GUI package.
+            - GARbro-Linux-GUI.AppImage: portable GUI AppImage when AppImageKit is available.
+            - GARbro-Linux-GUI-AppDir.tar.gz: unpacked AppDir fallback.
           prerelease: true
           make_latest: false
           overwrite_files: true
           files: |
             artifacts/GARbro-Linux-GUI.zip
             artifacts/GARbro-Linux-Portable.zip
+            artifacts/packages/GARbro-Linux-GUI*
